@@ -3,7 +3,7 @@
     ************ */
 :root {
 	--primary: #ff5500;
-	--primary-darker: #E7000B;
+	--primary-darker: #c44c06;
 	--secondary: #364153;
 	--surface: #fff7edi;
 	--bg-w: #FFFFFF;
@@ -23,7 +23,7 @@
 	--shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
 	--shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 	/**** Font and typography ****/
-	--font: 'Outfit', sans-serif;
+	--font: 'Intert', sans-serif;
 	--fs-h1: 2.986rem;
   --fs-h2: 2.488rem;
   --fs-h3: 2.074rem;
@@ -33,9 +33,6 @@
   --fs-p: 1rem;
   --fs-small: 0.833rem;
 	--fs-small-2: 0.694rem;
-	/*Font Size
-	--normal-font-size: ;
-	--h1-font-size: ;*/
 	/*Font weight*/
 	--font-regular: 400;
 	--font-medium: 500;
@@ -100,7 +97,29 @@ h3,
 h4 {
 	color: var(--title-color);
 	font-family: var(--font);
-	font-weight: var(--font-medium);
+	font-weight: var(--font-bold);
+}
+h1 {
+	font-size: var(--fs-h1);
+}
+h2 {
+	font-size: var(--fs-h2);
+}
+h3 {
+	font-size: var(--fs-h3);
+}
+h4 {
+	font-size: var(--fs-h4);
+}
+h5 {
+	font-size: var(--fs-h5);
+}
+h6 {
+	font-size: var(--fs-h6);
+}
+p{
+	font-size: var(--fs-p);
+	margin-bottom: 1rem;
 }
 
 ul {
@@ -161,13 +180,12 @@ button {
 	display: grid;
 	gap: 1.5rem;
 }
-.gap-1 {
-	gap: .3em;
-}
+.gap-1 {gap: .3em;}
+.gap-2 {gap: .6em;}
 
-/* .section {
-	padding-block: em em;
-} */
+.section {
+	padding-block: 6em 6em;
+}
 
 .section__title {
 	text-align: center;
@@ -207,6 +225,8 @@ button {
 }
 .nav_ul{
 	width: 50%;
+	justify-content: flex-end;
+	gap: 2em;
 }
 .nav__links:hover {
   color: var(--primary);
@@ -234,20 +254,38 @@ button {
 .nav__links:hover::after {
 	width: 100%;
 }
-.btn{
+.btn {
 	padding: 0.6em 1em;
-	border-radius: var(--radius);
-	border: 1px solid var(--primary);
+ 	border-radius: 8px;
+ 	font-weight: 600;
+ 	cursor: pointer;
+ 	transition: all 0.3s ease;
 }
-.log_btn{
-	
+.btn:hover {
+	transform: scale(0.95);
+	box-shadow: var(--shadow-lg);
+}
+.log_btn ,.sign_btn{
+	border: 1px solid var(--primary);
+	color: white;
+}
+.log_btn {
 	color: var(--primary);
 }
-.sign_btn{
+.sign_btn , .btn-brws{
 	background-color: var(--primary);
 	color: var(--white);
 }
-
+.btn-bok{
+	border: 1px solid var(--secondary);
+	color: var(--white);
+}
+.btn-bok:hover{
+	border: 1px solid var(--primary);
+}
+.btn-brws:hover{
+	background-color: var(--primary-darker);
+}
 .profile{
 	width: 45px;
 	height: 45px;
@@ -289,7 +327,72 @@ button {
 
 /***********
     main 
-    ***********/
+		***********/
+.main {
+	margin-top: 90px;
+}
+
+/* Hero section */
+.hero_section {
+	background-image: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), url(https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?w=1600&q=80);
+	background-size: cover;
+	background-position: center;
+	background-repeat: no-repeat;
+}
+.p_hero {
+	font-size: var(--fs-p);
+	margin-top: 0.15em;
+	font-weight: 500;
+}
+.btn_hero{
+	margin-top: 2.5em;
+}
+
+
+/* foooormmm */
+.search-form {
+	background: white;
+	padding: 40px;
+	border-radius: 16px;
+	box-shadow: var(--shadow);
+	margin: -80px auto 40px;
+	position: absolute;
+	z-index: 10;
+	width: 70%;
+	top: 55%;
+	transform: translateY(-50%);
+}
+.form-row {
+	margin-bottom: 1em;
+	padding: 1.5em;
+}
+.btn-serch:hover {
+	transform: scale(1);
+}
+.form-group {
+	margin-bottom: 24px;
+	text-align: left;
+	flex-grow: 1;
+}
+.form-label {
+	display: block;
+	margin-bottom: 8px;
+	font-weight: 500;
+	color: var(--text);
+}
+.form-input {
+	width: 100%;
+	padding: 0.75em 1em;
+	border: 1px solid #ddd;
+	border-radius: 8px;
+	font-size: 16px;
+	transition: border-color 0.3s;
+}
+.form-input:focus {
+	outline: none;
+	border-color: var(--luminex-blue);
+	box-shadow: 0 0 0 3px rgba(101, 171, 234, 0.1);
+}
 
 
 
