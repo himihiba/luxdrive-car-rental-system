@@ -18,7 +18,7 @@ session_start();
 	<header class="header" id="header">
 		<div class="container flex-space">
 			<a href="index.php?page=home" class="nav__logo">LUXDRIVE</a>
-			<nav class="nav flex nav_ul">
+			<nav class="nav flex nav_ul nav_mobile">
 				<ul class="nav__list flex ">
 					<li><a href="index.php?page=home" class="nav__links">Home</a></li>
 					<li><a href="index.php?page=browse" class="nav__links">Browse cars</a></li>
@@ -186,6 +186,62 @@ session_start();
             </div>
         </div>
 		</section>
+		<section class=" section how-it-works-section">
+        <div class="container">
+					<!-- Header -->
+            <div class="section-header">
+                <h2 class="main-title">How it works</h2>
+            </div>
+            <div class="timeline-container">
+                <!-- Horizontal Line -->
+                <div class="timeline-line"></div>
+                
+                <div class="steps-grid">
+                    <!-- Step 1 -->
+                    <div class="step">
+                        <div class="step-icon">
+                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                            </svg>
+                        </div>
+                        <div class="step-number">01</div>
+                        <h3 class="step-title">Search and select</h3>
+                        <p class="step-description">
+                            Browse our premium collection and filter by brand, type, or features.
+                        </p>
+                    </div>
+
+                    <!-- Step 2 -->
+                    <div class="step">
+                        <div class="step-icon">
+                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                            </svg>
+                        </div>
+                        <div class="step-number">02</div>
+                        <h3 class="step-title">Book and customize</h3>
+                        <p class="step-description">
+                            Select dates, add extras, and get instant confirmation.
+                        </p>
+                    </div>
+
+                    <!-- Step 3 -->
+                    <div class="step">
+                        <div class="step-icon">
+                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+                            </svg>
+                        </div>
+                        <div class="step-number">03</div>
+                        <h3 class="step-title">Pick up and drive</h3>
+                        <p class="step-description">
+                            Complete quick paperwork and hit the road in your dream car.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
 	</main>
 
 	<!-- FOOTER -->
