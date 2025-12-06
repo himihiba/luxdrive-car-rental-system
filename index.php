@@ -1,78 +1,517 @@
 <?php
-// // Database constants
-// define('DB_HOST', 'localhost');
-// define('DB_NAME', 'car_rental_agency');
-// define('DB_USER', 'root');
-// define('DB_PASS', '');
-// define('BASE_URL', (
-// 	(!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http'
-// ) . '://' . preg_replace('/[^A-Za-z0-9\.\-:_]/', '', $_SERVER['HTTP_HOST']) . rtrim(dirname($_SERVER['PHP_SELF']), '/\\') . '/');
+// ============================================
+// LUXDRIVE - Car Rental System
+// Backend Implementation with Database
+// ============================================
 
-// Start Session
 session_start();
 
-// // Database Connection
-// function getDB()
-// {
-// 	static $db = null;
-// 	if ($db === null) {
-// 		try {
-// 			$dsn = "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4";
-// 			$db = new PDO($dsn, DB_USER, DB_PASS);
-// 			$db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-// 			$db->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
-// 		} catch (PDOException $e) {
-// 			die("Database connection failed: " . $e->getMessage());
-// 		}
-// 	}
-// 	return $db;
-// }
+// Database Configuration
+$host = "localhost";
+$user = "root";
+$pass = "";
+$dbname = "luxdrive";
 
-// // Create Database and Tables if not exists
-// function initializeDatabase()
-// {
-// 	$db = getDB();
+// Global PDO connection
+$pdo = null;
 
-// 	$sql = file_get_contents('database.sql');
-// 	if ($sql) {
-// 		$db->exec($sql);
-// 	}
-// }
+// DATABASE INITIALIZATION
+
+function initializeDatabase()
+{
+    global $pdo, $host, $user, $pass, $dbname;
+
+    try {
+        $pdo = new PDO("mysql:host=$host", $user, $pass);
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+        $pdo->exec("CREATE DATABASE IF NOT EXISTS `$dbname` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+        $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $user, $pass);
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+        // Check if tables exist
+        $stmt = $pdo->query("SHOW TABLES LIKE 'clients'");
+        if ($stmt->rowCount() == 0) {
+            createTables();
+        }
+
+        return true;
+    } catch (PDOException $e) {
+        error_log("Database error: " . $e->getMessage());
+        return false;
+    }
+}
+
+function createTables()
+{
+    global $pdo;
+
+    $sql = "
+    CREATE TABLE IF NOT EXISTS clients (
+        client_id INT AUTO_INCREMENT PRIMARY KEY,
+        first_name VARCHAR(50) NOT NULL,
+        last_name VARCHAR(50) NOT NULL,
+        email VARCHAR(100) UNIQUE NOT NULL,
+        phone VARCHAR(20),
+        driver_license VARCHAR(50) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        address VARCHAR(255),
+        registration_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS cars (
+        car_id INT AUTO_INCREMENT PRIMARY KEY,
+        brand VARCHAR(50) NOT NULL,
+        model VARCHAR(50) NOT NULL,
+        year INT CHECK (year >= 1990),
+        license_plate VARCHAR(20) UNIQUE NOT NULL,
+        color VARCHAR(30),
+        mileage INT DEFAULT 0,
+        status ENUM('available', 'rented', 'maintenance') DEFAULT 'available',
+        daily_price DECIMAL(10,2) NOT NULL,
+        image_url VARCHAR(500) DEFAULT NULL,
+        car_type VARCHAR(50) DEFAULT 'sedan',
+        seats INT DEFAULT 5,
+        transmission VARCHAR(20) DEFAULT 'Automatic',
+        fuel_type VARCHAR(20) DEFAULT 'Gasoline'
+    );
+
+    CREATE TABLE IF NOT EXISTS staff (
+        staff_id INT AUTO_INCREMENT PRIMARY KEY,
+        first_name VARCHAR(50) NOT NULL,
+        last_name VARCHAR(50) NOT NULL,
+        email VARCHAR(100) UNIQUE NOT NULL,
+        phone VARCHAR(20),
+        role ENUM('admin', 'agent', 'mechanic') DEFAULT 'agent',
+        password_hash VARCHAR(255) NOT NULL,
+        hire_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS rentals (
+        rental_id INT AUTO_INCREMENT PRIMARY KEY,
+        client_id INT NOT NULL,
+        car_id INT NOT NULL,
+        staff_id INT,
+        start_date DATE NOT NULL,
+        end_date DATE NOT NULL,
+        total_price DECIMAL(10,2) NOT NULL,
+        status ENUM('ongoing', 'completed', 'cancelled') DEFAULT 'ongoing',
+        extras TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (client_id) REFERENCES clients(client_id) ON DELETE CASCADE,
+        FOREIGN KEY (car_id) REFERENCES cars(car_id) ON DELETE CASCADE,
+        FOREIGN KEY (staff_id) REFERENCES staff(staff_id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS payments (
+        payment_id INT AUTO_INCREMENT PRIMARY KEY,
+        rental_id INT NOT NULL,
+        amount DECIMAL(10,2) NOT NULL,
+        method ENUM('cash', 'credit_card', 'debit_card', 'bank_transfer') NOT NULL,
+        payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        status ENUM('paid', 'pending', 'refunded') DEFAULT 'pending',
+        FOREIGN KEY (rental_id) REFERENCES rentals(rental_id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS maintenance (
+        maintenance_id INT AUTO_INCREMENT PRIMARY KEY,
+        car_id INT NOT NULL,
+        description TEXT NOT NULL,
+        cost DECIMAL(10,2) DEFAULT 0.00,
+        maintenance_date DATE NOT NULL,
+        performed_by VARCHAR(100),
+        FOREIGN KEY (car_id) REFERENCES cars(car_id) ON DELETE CASCADE
+    );
+    ";
+
+    $pdo->exec($sql);
+    insertSampleData();
+    createTriggersAndViews();
+}
+
+function insertSampleData()
+{
+    global $pdo;
+
+    // Sample clients
+    $pdo->exec("INSERT IGNORE INTO clients (first_name, last_name, email, phone, driver_license, password_hash, address) VALUES
+        ('Alice', 'Martin', 'alice.martin@email.com', '0612345678', 'DL12345A', '" . password_hash('client123', PASSWORD_DEFAULT) . "', '10 Rue Lafayette, Paris'),
+        ('Bob', 'Durand', 'bob.durand@email.com', '0623456789', 'DL67890B', '" . password_hash('client123', PASSWORD_DEFAULT) . "', '22 Avenue Victor Hugo, Lyon')
+    ");
+
+    // Sample cars
+    $pdo->exec("INSERT IGNORE INTO cars (brand, model, year, license_plate, color, mileage, status, daily_price, image_url, car_type, seats, transmission, fuel_type) VALUES
+        ('Mercedes-Benz', 'S-Class', 2023, 'AB-123-CD', 'Black', 5000, 'available', 250.00, 'https://images.unsplash.com/photo-1618843479313-40f8afb4b4d8?w=800&q=80', 'Luxury', 5, 'Automatic', 'Gasoline'),
+        ('BMW', '7 Series', 2023, 'EF-456-GH', 'White', 10000, 'available', 280.00, 'https://images.unsplash.com/photo-1555215695-3004980ad54e?w=800&q=80', 'Luxury', 5, 'Automatic', 'Gasoline'),
+        ('Audi', 'RS e-tron GT', 2024, 'IJ-789-KL', 'Grey', 2000, 'available', 320.00, 'https://images.unsplash.com/photo-1617788138017-80ad40651399?w=800&q=80', 'Sports', 4, 'Automatic', 'Electric'),
+        ('Porsche', 'Panamera', 2023, 'MN-012-OP', 'Silver', 8000, 'available', 350.00, 'https://images.unsplash.com/photo-1601679147136-22d1032399e4?w=800&q=80', 'Sports', 4, 'Automatic', 'Hybrid'),
+        ('Range Rover', 'Autobiography', 2024, 'QR-345-ST', 'Black', 3000, 'available', 300.00, 'https://images.unsplash.com/photo-1601362840469-51e4d8d58785?w=800&q=80', 'SUV', 5, 'Automatic', 'Gasoline'),
+        ('Bentley', 'Continental GT', 2023, 'UV-678-WX', 'Blue', 6000, 'available', 450.00, 'https://images.unsplash.com/photo-1563720223185-11003d516935?w=800&q=80', 'Luxury', 4, 'Automatic', 'Gasoline'),
+        ('Ferrari', '488 GTB', 2022, 'YZ-901-AB', 'Red', 4000, 'available', 850.00, 'https://images.unsplash.com/photo-1592198084033-aade902d1aae?w=800&q=80', 'Sports', 2, 'Automatic', 'Gasoline'),
+        ('Lamborghini', 'Huracan', 2023, 'CD-234-EF', 'Yellow', 2500, 'available', 900.00, 'https://images.unsplash.com/photo-1544636331-e26879cd4d9b?w=800&q=80', 'Sports', 2, 'Automatic', 'Gasoline')
+    ");
+
+    // Sample staff
+    $pdo->exec("INSERT IGNORE INTO staff (first_name, last_name, email, phone, role, password_hash) VALUES
+        ('Marie', 'Dupont', 'marie.dupont@luxdrive.com', '0611223344', 'admin', '" . password_hash('admin123', PASSWORD_DEFAULT) . "'),
+        ('Lucas', 'Girard', 'lucas.girard@luxdrive.com', '0622334455', 'agent', '" . password_hash('agent123', PASSWORD_DEFAULT) . "'),
+        ('Emma', 'Petit', 'emma.petit@luxdrive.com', '0633445566', 'mechanic', '" . password_hash('mech123', PASSWORD_DEFAULT) . "')
+    ");
+}
+
+function createTriggersAndViews()
+{
+    global $pdo;
+
+    // Drop and recreate triggers
+    $pdo->exec("DROP TRIGGER IF EXISTS after_rental_insert");
+    $pdo->exec("CREATE TRIGGER after_rental_insert AFTER INSERT ON rentals FOR EACH ROW BEGIN UPDATE cars SET status = 'rented' WHERE car_id = NEW.car_id; END");
+
+    $pdo->exec("DROP TRIGGER IF EXISTS after_rental_complete");
+    $pdo->exec("CREATE TRIGGER after_rental_complete AFTER UPDATE ON rentals FOR EACH ROW BEGIN IF NEW.status = 'completed' THEN UPDATE cars SET status = 'available' WHERE car_id = NEW.car_id; END IF; END");
+
+    // Views
+    $pdo->exec("CREATE OR REPLACE VIEW currently_rented_cars AS SELECT r.rental_id, r.car_id, c.brand, c.model, c.license_plate, r.client_id, r.start_date, r.end_date FROM rentals r JOIN cars c ON r.car_id = c.car_id WHERE r.status = 'ongoing'");
+
+    $pdo->exec("CREATE OR REPLACE VIEW revenue_by_month AS SELECT YEAR(payment_date) AS yr, MONTH(payment_date) AS m, SUM(amount) AS revenue FROM payments WHERE status = 'paid' GROUP BY yr, m");
+}
 
 
-// // Security Functions
+// SECURITY FUNCTIONS
+
 function sanitize($data)
 {
     return htmlspecialchars(strip_tags(trim($data)));
 }
 
-// function hashPassword($password)
-// {
-// 	return password_hash($password, PASSWORD_DEFAULT);
-// }
+function isLoggedIn()
+{
+    return isset($_SESSION['user_id']) && isset($_SESSION['user_type']);
+}
 
-// function verifyPassword($password, $hash)
-// {
-// 	return password_verify($password, $hash);
-// }
+function isClient()
+{
+    return isLoggedIn() && $_SESSION['user_type'] === 'client';
+}
 
-// // Check if user is logged in as staff
-// function isStaffLoggedIn()
-// {
-// 	return isset($_SESSION['staff_id']);
-// }
+function isStaff()
+{
+    return isLoggedIn() && in_array($_SESSION['user_type'], ['admin', 'agent', 'mechanic']);
+}
 
-// function isAdmin()
-// {
-// 	return isset($_SESSION['role']) && $_SESSION['role'] === 'admin';
-// }
+function requireLogin()
+{
+    if (!isLoggedIn()) {
+        header('Location: index.php?page=auth');
+        exit;
+    }
+}
 
-// HTML TEMPLATE FUNCTIONS
 
+// AUTHENTICATION HANDLERS
+
+function handleLogin()
+{
+    global $pdo;
+
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') return null;
+    if (!isset($_POST['action']) || $_POST['action'] !== 'login') return null;
+
+    $email = sanitize($_POST['email'] ?? '');
+    $password = $_POST['password'] ?? '';
+
+    if (empty($email) || empty($password)) {
+        return ['error' => 'Please fill in all fields'];
+    }
+
+    // Check clients 
+
+    $stmt = $pdo->prepare("SELECT client_id, first_name, last_name, email, password_hash FROM clients WHERE email = ?");
+    $stmt->execute([$email]);
+    $client = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($client && password_verify($password, $client['password_hash'])) {
+        $_SESSION['user_id'] = $client['client_id'];
+        $_SESSION['user_type'] = 'client';
+        $_SESSION['user_name'] = $client['first_name'] . ' ' . $client['last_name'];
+        $_SESSION['user_email'] = $client['email'];
+        $_SESSION['user_initials'] = strtoupper(substr($client['first_name'], 0, 1) . substr($client['last_name'], 0, 1));
+        header('Location: index.php?page=home');
+        exit;
+    }
+
+    // Check staff
+    $stmt = $pdo->prepare("SELECT staff_id, first_name, last_name, email, role, password_hash FROM staff WHERE email = ?");
+    $stmt->execute([$email]);
+    $staff = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($staff && password_verify($password, $staff['password_hash'])) {
+        $_SESSION['user_id'] = $staff['staff_id'];
+        $_SESSION['user_type'] = $staff['role'];
+        $_SESSION['user_name'] = $staff['first_name'] . ' ' . $staff['last_name'];
+        $_SESSION['user_email'] = $staff['email'];
+        $_SESSION['user_initials'] = strtoupper(substr($staff['first_name'], 0, 1) . substr($staff['last_name'], 0, 1));
+        header('Location: index.php?page=dashboard');
+        exit;
+    }
+
+    return ['error' => 'Invalid email or password'];
+}
+
+function handleRegister()
+{
+    global $pdo;
+
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') return null;
+    if (!isset($_POST['action']) || $_POST['action'] !== 'register') return null;
+
+    $firstName = sanitize($_POST['first_name'] ?? '');
+    $lastName = sanitize($_POST['last_name'] ?? '');
+    $email = sanitize($_POST['email'] ?? '');
+    $phone = sanitize($_POST['phone'] ?? '');
+    $driverLicense = sanitize($_POST['driver_license'] ?? '');
+    $password = $_POST['password'] ?? '';
+    $confirmPassword = $_POST['confirm_password'] ?? '';
+
+    // Validation
+    if (empty($firstName) || empty($lastName) || empty($email) || empty($driverLicense) || empty($password)) {
+        return ['error' => 'Please fill in all required fields'];
+    }
+
+    if ($password !== $confirmPassword) {
+        return ['error' => 'Passwords do not match'];
+    }
+
+    if (strlen($password) < 6) {
+        return ['error' => 'Password must be at least 6 characters'];
+    }
+
+    // Check if email exists
+    $stmt = $pdo->prepare("SELECT client_id FROM clients WHERE email = ?");
+    $stmt->execute([$email]);
+    if ($stmt->fetch()) {
+        return ['error' => 'Email already registered'];
+    }
+
+    // Check if driver license exists
+    $stmt = $pdo->prepare("SELECT client_id FROM clients WHERE driver_license = ?");
+    $stmt->execute([$driverLicense]);
+    if ($stmt->fetch()) {
+        return ['error' => 'Driver license already registered'];
+    }
+
+    // Insert new client
+    $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+    $stmt = $pdo->prepare("INSERT INTO clients (first_name, last_name, email, phone, driver_license, password_hash) VALUES (?, ?, ?, ?, ?, ?)");
+
+    try {
+        $stmt->execute([$firstName, $lastName, $email, $phone, $driverLicense, $passwordHash]);
+        $clientId = $pdo->lastInsertId();
+
+        $_SESSION['user_id'] = $clientId;
+        $_SESSION['user_type'] = 'client';
+        $_SESSION['user_name'] = $firstName . ' ' . $lastName;
+        $_SESSION['user_email'] = $email;
+        $_SESSION['user_initials'] = strtoupper(substr($firstName, 0, 1) . substr($lastName, 0, 1));
+
+        header('Location: index.php?page=home');
+        exit;
+    } catch (PDOException $e) {
+        return ['error' => 'Registration failed. Please try again.'];
+    }
+}
+
+function handleLogout()
+{
+    session_destroy();
+    header('Location: index.php?page=home');
+    exit;
+}
+
+
+// DATA FUNCTIONS
+
+function getCars($filters = [])
+{
+    global $pdo;
+
+    $sql = "SELECT * FROM cars WHERE 1=1";
+    $params = [];
+
+    if (!empty($filters['status'])) {
+        $sql .= " AND status = ?";
+        $params[] = $filters['status'];
+    }
+
+    if (!empty($filters['car_type'])) {
+        $sql .= " AND car_type = ?";
+        $params[] = $filters['car_type'];
+    }
+
+    if (!empty($filters['brand'])) {
+        $sql .= " AND brand LIKE ?";
+        $params[] = '%' . $filters['brand'] . '%';
+    }
+
+    $sql .= " ORDER BY brand, model";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+function getCarById($carId)
+{
+    global $pdo;
+    $stmt = $pdo->prepare("SELECT * FROM cars WHERE car_id = ?");
+    $stmt->execute([$carId]);
+    return $stmt->fetch(PDO::FETCH_ASSOC);
+}
+
+function getAvailableCars()
+{
+    return getCars(['status' => 'available']);
+}
+
+function createRental($clientId, $carId, $startDate, $endDate, $totalPrice, $extras = null)
+{
+    global $pdo;
+
+    $stmt = $pdo->prepare("INSERT INTO rentals (client_id, car_id, start_date, end_date, total_price, extras, status) VALUES (?, ?, ?, ?, ?, ?, 'ongoing')");
+    $stmt->execute([$clientId, $carId, $startDate, $endDate, $totalPrice, $extras]);
+    return $pdo->lastInsertId();
+}
+
+function createPayment($rentalId, $amount, $method, $status = 'pending')
+{
+    global $pdo;
+
+    $stmt = $pdo->prepare("INSERT INTO payments (rental_id, amount, method, status) VALUES (?, ?, ?, ?)");
+    $stmt->execute([$rentalId, $amount, $method, $status]);
+    return $pdo->lastInsertId();
+}
+
+function getClientRentals($clientId)
+{
+    global $pdo;
+
+    $stmt = $pdo->prepare("
+        SELECT r.*, c.brand, c.model, c.image_url, c.license_plate,
+               p.status as payment_status, p.method as payment_method
+        FROM rentals r
+        JOIN cars c ON r.car_id = c.car_id
+        LEFT JOIN payments p ON r.rental_id = p.rental_id
+        WHERE r.client_id = ?
+        ORDER BY r.created_at DESC
+    ");
+    $stmt->execute([$clientId]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+function getClientProfile($clientId)
+{
+    global $pdo;
+    $stmt = $pdo->prepare("SELECT * FROM clients WHERE client_id = ?");
+    $stmt->execute([$clientId]);
+    return $stmt->fetch(PDO::FETCH_ASSOC);
+}
+
+function updateClientProfile($clientId, $data)
+{
+    global $pdo;
+
+    $sql = "UPDATE clients SET first_name = ?, last_name = ?, phone = ?, address = ? WHERE client_id = ?";
+    $stmt = $pdo->prepare($sql);
+    return $stmt->execute([$data['first_name'], $data['last_name'], $data['phone'], $data['address'], $clientId]);
+}
+
+// ============================================
+// BOOKING HANDLER
+// ============================================
+function handleBooking()
+{
+    global $pdo;
+
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') return null;
+    if (!isset($_POST['action']) || $_POST['action'] !== 'book') return null;
+    if (!isClient()) return ['error' => 'Please login to book'];
+
+    $carId = intval($_POST['car_id'] ?? 0);
+    $startDate = sanitize($_POST['start_date'] ?? '');
+    $endDate = sanitize($_POST['end_date'] ?? '');
+    $totalPrice = floatval($_POST['total_price'] ?? 0);
+    $extras = sanitize($_POST['extras'] ?? '');
+    $paymentMethod = sanitize($_POST['payment_method'] ?? 'credit_card');
+
+    if (!$carId || !$startDate || !$endDate || !$totalPrice) {
+        return ['error' => 'Invalid booking data'];
+    }
+
+    // Check car availability
+    $car = getCarById($carId);
+    if (!$car || $car['status'] !== 'available') {
+        return ['error' => 'Car is not available'];
+    }
+
+    try {
+        $pdo->beginTransaction();
+
+        $rentalId = createRental($_SESSION['user_id'], $carId, $startDate, $endDate, $totalPrice, $extras);
+        createPayment($rentalId, $totalPrice, $paymentMethod, 'paid');
+
+        $pdo->commit();
+
+        return ['success' => true, 'rental_id' => $rentalId];
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        return ['error' => 'Booking failed. Please try again.'];
+    }
+}
+
+function handleProfileUpdate()
+{
+    global $pdo;
+
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') return null;
+    if (!isset($_POST['action']) || $_POST['action'] !== 'update_profile') return null;
+    if (!isClient()) return ['error' => 'Please login'];
+
+    $data = [
+        'first_name' => sanitize($_POST['first_name'] ?? ''),
+        'last_name' => sanitize($_POST['last_name'] ?? ''),
+        'phone' => sanitize($_POST['phone'] ?? ''),
+        'address' => sanitize($_POST['address'] ?? '')
+    ];
+
+    if (updateClientProfile($_SESSION['user_id'], $data)) {
+        $_SESSION['user_name'] = $data['first_name'] . ' ' . $data['last_name'];
+        $_SESSION['user_initials'] = strtoupper(substr($data['first_name'], 0, 1) . substr($data['last_name'], 0, 1));
+        return ['success' => 'Profile updated successfully'];
+    }
+
+    return ['error' => 'Failed to update profile'];
+}
+
+// Initialize database
+initializeDatabase();
+
+// Handle form submissions
+$authError = handleLogin();
+if (!$authError) $authError = handleRegister();
+$bookingResult = handleBooking();
+$profileResult = handleProfileUpdate();
+
+// Handle logout
+if (isset($_GET['page']) && $_GET['page'] === 'logout') {
+    handleLogout();
+}
+
+// ============================================
+// RENDER FUNCTIONS
+// ============================================
 function renderHeader($title = 'LUXDRIVE')
 {
 ?>
-
     <!DOCTYPE html>
     <html lang="en">
 
@@ -80,36 +519,36 @@ function renderHeader($title = 'LUXDRIVE')
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title><?php echo htmlspecialchars($title); ?></title>
-        <link rel="stylesheet" href="styleV04.css">
+        <link rel="stylesheet" href="styleV06.css">
     </head>
 
     <body>
-        <!-- HEADER -->
         <header class="header" id="header">
             <div class="container flex-space">
                 <a href="index.php?page=home" class="nav__logo">LUXDRIVE</a>
                 <input type="checkbox" class="input__toggel" id="inputToggel">
                 <nav class="nav flex nav_ul nav__menu" style="align-items: center;">
-                    <ul class="nav__list flex ">
+                    <ul class="nav__list flex">
                         <li><a href="index.php?page=home" class="nav__links">Home</a></li>
                         <li><a href="index.php?page=browse" class="nav__links">Browse cars</a></li>
                         <li><a href="index.php?page=home#contactus" class="nav__links">Contact us</a></li>
                     </ul>
-                    <?php if (isset($_SESSION['user_id'])) { ?>
+                    <?php if (isLoggedIn()) { ?>
                         <div class="flex-center gap-1 user-dropdown">
-                            <div class="profile flex-center"><span>AM</span></div>
-
+                            <div class="profile flex-center"><span><?php echo $_SESSION['user_initials']; ?></span></div>
                             <button class="dropdown-toggle">
                                 <img width="26" height="26" src="https://img.icons8.com/material-rounded/24/expand-arrow--v1.png" />
                             </button>
-
                             <div class="dropdown-menu">
-                                <a href="index.php?page=rental_history">Rental History</a>
-                                <a href="index.php?page=profile">Profile</a>
+                                <?php if (isClient()) { ?>
+                                    <a href="index.php?page=rental_history">Rental History</a>
+                                    <a href="index.php?page=profile">Profile</a>
+                                <?php } else { ?>
+                                    <a href="index.php?page=dashboard">Dashboard</a>
+                                <?php } ?>
                                 <hr>
                                 <a href="index.php?page=logout" class="logout">Logout</a>
                             </div>
-
                         </div>
                     <?php } else { ?>
                         <ul class="flex auth-list">
@@ -117,65 +556,46 @@ function renderHeader($title = 'LUXDRIVE')
                             <li><a href="index.php?page=auth" class="auth_link btn sign_btn">sign Up</a></li>
                         </ul>
                     <?php } ?>
-
                 </nav>
                 <label for="inputToggel" class="nav__toggel">
                     <span class="navig_menu"></span>
                 </label>
             </div>
         </header>
-
-        <!--MAIN -->
         <main class="main">
         <?php
     }
+
     function renderFooter()
     {
         ?>
         </main>
-        <!-- FOOTER -->
         <footer class="footer">
-            <!-- Decorative Elements -->
             <div class="decorative-blur-1"></div>
             <div class="decorative-blur-2"></div>
             <div class="footer-content">
-
-                <!-- Main Footer Content -->
                 <div class="footer-main">
                     <div class="footer-grid">
-                        <!-- Brand Column -->
                         <div class="brand-column">
                             <div class="brand-logo">LUXDRIVE</div>
-                            <p class="brand-description">
-                                Experience the world's finest luxury vehicles. Premium car rental at your fingertips.
-                            </p>
+                            <p class="brand-description">Experience the world's finest luxury vehicles. Premium car rental at your fingertips.</p>
                             <div class="social-links">
-                                <a href="#" class="social-link" aria-label="Facebook">
-                                    <svg fill="currentColor" viewBox="0 0 24 24">
+                                <a href="#" class="social-link" aria-label="Facebook"><svg fill="currentColor" viewBox="0 0 24 24">
                                         <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"></path>
-                                    </svg>
-                                </a>
-                                <a href="#" class="social-link" aria-label="Twitter">
-                                    <svg fill="currentColor" viewBox="0 0 24 24">
+                                    </svg></a>
+                                <a href="#" class="social-link" aria-label="Twitter"><svg fill="currentColor" viewBox="0 0 24 24">
                                         <path d="M23 3a10.9 10.9 0 01-3.14 1.53 4.48 4.48 0 00-7.86 3v1A10.66 10.66 0 013 4s-4 9 5 13a11.64 11.64 0 01-7 2c9 5 20 0 20-11.5a4.5 4.5 0 00-.08-.83A7.72 7.72 0 0023 3z"></path>
-                                    </svg>
-                                </a>
-                                <a href="#" class="social-link" aria-label="Instagram">
-                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    </svg></a>
+                                <a href="#" class="social-link" aria-label="Instagram"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <rect x="2" y="2" width="20" height="20" rx="5" ry="5" stroke-width="2"></rect>
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37zm1.5-4.87h.01"></path>
-                                    </svg>
-                                </a>
-                                <a href="#" class="social-link" aria-label="LinkedIn">
-                                    <svg fill="currentColor" viewBox="0 0 24 24">
+                                    </svg></a>
+                                <a href="#" class="social-link" aria-label="LinkedIn"><svg fill="currentColor" viewBox="0 0 24 24">
                                         <path d="M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6zM2 9h4v12H2z"></path>
                                         <circle cx="4" cy="4" r="2"></circle>
-                                    </svg>
-                                </a>
+                                    </svg></a>
                             </div>
                         </div>
-
-                        <!-- Company Column -->
                         <div class="footer-column">
                             <h4 class="footer-column-title">Company</h4>
                             <ul class="footer-links">
@@ -185,8 +605,6 @@ function renderHeader($title = 'LUXDRIVE')
                                 <li><a href="#">About Us</a></li>
                             </ul>
                         </div>
-
-                        <!-- Support Column -->
                         <div class="footer-column">
                             <h4 class="footer-column-title">Support</h4>
                             <ul class="footer-links">
@@ -196,8 +614,6 @@ function renderHeader($title = 'LUXDRIVE')
                                 <li><a href="#">Live Chat</a></li>
                             </ul>
                         </div>
-
-                        <!-- Legal Column -->
                         <div class="footer-column">
                             <h4 class="footer-column-title">Legal</h4>
                             <ul class="footer-links">
@@ -207,8 +623,6 @@ function renderHeader($title = 'LUXDRIVE')
                                 <li><a href="#">Licenses</a></li>
                             </ul>
                         </div>
-
-                        <!-- Contact Column -->
                         <div class="footer-column">
                             <h4 class="footer-column-title">Contact</h4>
                             <div class="contact-item">
@@ -232,8 +646,6 @@ function renderHeader($title = 'LUXDRIVE')
                             </div>
                         </div>
                     </div>
-
-                    <!-- Bottom Bar -->
                     <div class="footer-bottom">
                         <p class="copyright">© 2025 LUXDRIVE. All rights reserved.</p>
                         <div class="support-badge">
@@ -246,1767 +658,1023 @@ function renderHeader($title = 'LUXDRIVE')
                 </div>
             </div>
         </footer>
-    <?php
-    }
-    function renderHomePage()
-    {
-    ?>
-
-        <section class="section hero_section">
-            <div class="container flex-center hero_container" style="color: white; flex-direction: column; text-align: center;">
-                <h1>DON'T RENT A CAR.</h1>
-                <h1>RENT THE CAR.</h1>
-                <p class="p_hero">Premium car rental at affordable rates. Worldwide.</p>
-                <div class="btn_hero flex gap-2">
-                    <a href="?page=browse" class="btn btn-brws">Browse Our Fleet</a>
-                    <?php if (isset($_SESSION['user_id'])) { ?>
-                        <a href="?page=browse" class="btn btn-bok">Book Now</a>
-                    <?php } else { ?>
-                        <a href="?page=auth" class="btn btn-bok">Book Now</a>
-                    <?php } ?>
-                </div>
-                <form method="GET" action="?page=browse" class="search-form flex-column">
-                    <div class="flex gap-2 form-row">
-                        <div class="form-group">
-                            <label class="form-label">Pick-up Date</label>
-                            <input type="date" name="start_date" class="form-input" required>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Return Date</label>
-                            <input type="date" name="end_date" class="form-input" required>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Car Type</label>
-                            <select name="car_type" class="form-input">
-                                <option value="">All Types</option>
-                                <option value="sedan">Sedan</option>
-                                <option value="suv">SUV</option>
-                                <option value="luxury">Luxury</option>
-                                <option value="sports">Sports</option>
-                            </select>
-                        </div>
-                    </div>
-                    <button type="submit" class="btn btn-brws btn-serch" style="width: 100%;">Find Available Cars</button>
-                </form>
-            </div>
-        </section>
-        <section class="stats">
-            <div class="stats-grid">
-                <div class="stat-item">
-                    <h3>350+</h3>
-                    <p>Exclusive Vehicles</p>
-                </div>
-                <div class="stat-item">
-                    <h3>105</h3>
-                    <p>Countries Worldwide</p>
-                </div>
-                <div class="stat-item">
-                    <h3>24/7</h3>
-                    <p>Customer Support</p>
-                </div>
-                <div class="stat-item">
-                    <h3>2000+</h3>
-                    <p>Satisfied Customers</p>
-                </div>
-            </div>
-        </section>
-        <section class="section why-choose-section">
-            <div class="decorative-blur-1"></div>
-            <div class="decorative-blur-2"></div>
-
-            <div class="container">
-                <div class="section-header flex-center flex-col">
-                    <div>
-                        <span class="badge">Premium Benefits</span>
-                    </div>
-                    <h2 class="main-title">Why choose <span class="italic">LUXDRIVE</span>?</h2>
-                    <p class="subtitle">
-                        Experience unparalleled luxury with world-class service
-                    </p>
-                </div>
-                <div class="grid-main">
-                    <div class="featured-card">
-                        <div class="card-blur"></div>
-                        <div class="card-content">
-                            <div class="icon-box">
-                                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"></path>
-                                </svg>
-                            </div>
-                            <h3 class="card-title">Premium Fleet</h3>
-                            <p class="card-description">
-                                Drive the finest luxury vehicles from brands like Ferrari, Lamborghini, Rolls-Royce, and more. Meticulously maintained for perfection.
-                            </p>
-                            <div class="stat-display">
-                                <div class="stat-number">350+</div>
-                                <div class="stat-label">Exclusive vehicles</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Two Stacked Items -->
-                    <div class="stacked-cards">
-                        <div class="white-card">
-                            <div class="small-icon-box">
-                                <svg class="small-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"></path>
-                                </svg>
-                            </div>
-                            <h3 class="small-title">Best Prices</h3>
-                            <p class="small-description">Transparent pricing with no hidden fees. Premium quality at competitive rates.</p>
-                        </div>
-
-                        <div class="white-card">
-                            <div class="small-icon-box">
-                                <svg class="small-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
-                                </svg>
-                            </div>
-                            <h3 class="small-title">24/7 Support</h3>
-                            <p class="small-description">Dedicated concierge service available around the clock, wherever you are.</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Bottom Row - Three Equal Items -->
-                <div class="grid-bottom">
-                    <div class="gradient-card">
-                        <div class="gradient-blur"></div>
-                        <div class="card-content">
-                            <svg class="icon" style="width: 3rem; height: 3rem; margin-bottom: 1rem; opacity: 0.9;" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                            </svg>
-                            <h3 class="small-title">Global Coverage</h3>
-                            <p style="color: rgba(255, 255, 255, 0.9);">Available in 105 countries with thousands of locations.</p>
-                        </div>
-                    </div>
-
-                    <div class="white-card">
-                        <div class="small-icon-box">
-                            <svg class="small-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                            </svg>
-                        </div>
-                        <h3 class="small-title">Instant Booking</h3>
-                        <p class="small-description">Reserve your dream car in minutes with immediate confirmation.</p>
-                    </div>
-
-                    <div class="white-card">
-                        <div class="small-icon-box">
-                            <svg class="small-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
-                            </svg>
-                        </div>
-                        <h3 class="small-title">Fully Insured</h3>
-                        <p class="small-description">Comprehensive coverage on all vehicles for complete peace of mind.</p>
-                    </div>
-                </div>
-            </div>
-        </section>
-        <section class=" section how-it-works-section">
-            <div class="container">
-                <!-- Header -->
-                <div class="section-header">
-                    <div>
-                        <span class="badge">Simple Process</span>
-                    </div>
-                    <h2 class="main-title">How it works</h2>
-                    <p class="subtitle">
-                        Get on the road in three easy steps
-                    </p>
-                </div>
-                <div class="timeline-container">
-                    <!-- Horizontal Line -->
-                    <div class="timeline-line"></div>
-
-                    <div class="steps-grid">
-                        <!-- Step 1 -->
-                        <div class="step">
-                            <div class="step-icon">
-                                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                                </svg>
-                            </div>
-                            <div class="step-number">01</div>
-                            <h3 class="step-title">Search and select</h3>
-                            <p class="step-description">
-                                Browse our premium collection and filter by brand, type, or features.
-                            </p>
-                        </div>
-
-                        <!-- Step 2 -->
-                        <div class="step">
-                            <div class="step-icon">
-                                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                                </svg>
-                            </div>
-                            <div class="step-number">02</div>
-                            <h3 class="step-title">Book and customize</h3>
-                            <p class="step-description">
-                                Select dates, add extras, and get instant confirmation.
-                            </p>
-                        </div>
-
-                        <!-- Step 3 -->
-                        <div class="step">
-                            <div class="step-icon">
-                                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
-                                </svg>
-                            </div>
-                            <div class="step-number">03</div>
-                            <h3 class="step-title">Pick up and drive</h3>
-                            <p class="step-description">
-                                Complete quick paperwork and hit the road in your dream car.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-        <section class="section fleet-section" style="margin-top: -10rem;">
-            <div class="container flex flex-col" style="align-items: center;">
-                <!-- Header -->
-                <div style="margin-bottom: 1rem;">
-                    <span class="badge" style="margin-bottom: 3rem;">Our Collection</span>
-                </div>
-                <div class="section-header flex-space">
-                    <div class="header-content">
-                        <h2>Explore our fleet</h2>
-                        <p class="header-subtitle">
-                            Choose from our premium selection of luxury vehicles
-                        </p>
-                    </div>
-
-                    <!-- Navigation Buttons -->
-                    <div class="nav-buttons">
-                        <button class="nav-button" id="prevBtn">
-                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
-                            </svg>
-                        </button>
-                        <button class="nav-button" id="nextBtn">
-                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Slider -->
-                <div class="slider-container">
-                    <div class="slider-track" id="sliderTrack">
-                        <!-- Car 1 -->
-                        <div class="slider-item">
-                            <div class="car-card">
-                                <div class="car-image-container">
-                                    <img src="https://images.unsplash.com/photo-1758216383800-7023ee8ed42b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxsdXh1cnklMjBjYXIlMjBzZWRhbnxlbnwxfHx8fDE3NjQ5MzE4MzJ8MA&ixlib=rb-4.1.0&q=80&w=1080" alt="Mercedes-Benz S-Class" class="car-image">
-                                    <div class="status-badge">
-                                        <span class="status-available">● Available</span>
-                                    </div>
-                                </div>
-                                <div class="car-details">
-                                    <div>
-                                        <h3 class="car-title">Mercedes-Benz</h3>
-                                        <p class="car-subtitle">S-Class 2023</p>
-                                    </div>
-                                    <div class="car-specs">
-                                        <div class="spec-item">
-                                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                                            </svg>
-                                            <span>5,000 km</span>
-                                        </div>
-                                        <div class="spec-item">
-                                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"></path>
-                                            </svg>
-                                            <span>Black</span>
-                                        </div>
-                                    </div>
-                                    <div class="car-footer">
-                                        <div>
-                                            <div class="car-price">$250</div>
-                                            <div class="price-label">per day</div>
-                                        </div>
-                                        <a href="index.php?page=car-details&id=1"><button class="view-more-button">View More</button></a>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Car 2 -->
-                        <div class="slider-item">
-                            <div class="car-card">
-                                <div class="car-image-container">
-                                    <img src="https://images.unsplash.com/photo-1696581081901-f8e0f10713b2?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzcG9ydHMlMjBjYXIlMjByZWR8ZW58MXx8fHwxNzY0ODc0OTU4fDA&ixlib=rb-4.1.0&q=80&w=1080" alt="Ferrari 488 GTB" class="car-image">
-                                    <div class="status-badge">
-                                        <span class="status-available">● Available</span>
-                                    </div>
-                                </div>
-                                <div class="car-details">
-                                    <div>
-                                        <h3 class="car-title">Ferrari</h3>
-                                        <p class="car-subtitle">488 GTB 2022</p>
-                                    </div>
-                                    <div class="car-specs">
-                                        <div class="spec-item">
-                                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                                            </svg>
-                                            <span>8,000 km</span>
-                                        </div>
-                                        <div class="spec-item">
-                                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"></path>
-                                            </svg>
-                                            <span>Red</span>
-                                        </div>
-                                    </div>
-                                    <div class="car-footer">
-                                        <div>
-                                            <div class="car-price">$850</div>
-                                            <div class="price-label">per day</div>
-                                        </div>
-                                        <button class="view-more-button">View More</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Car 3 -->
-                        <div class="slider-item">
-                            <div class="car-card">
-                                <div class="car-image-container">
-                                    <img src="https://images.unsplash.com/photo-1714538701027-790deaef725b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxsdXh1cnklMjBzdXYlMjBibGFja3xlbnwxfHx8fDE3NjQ4ODU4OTB8MA&ixlib=rb-4.1.0&q=80&w=1080" alt="Range Rover Sport" class="car-image">
-                                    <div class="status-badge">
-                                        <span class="status-available">● Available</span>
-                                    </div>
-                                </div>
-                                <div class="car-details">
-                                    <div>
-                                        <h3 class="car-title">Range Rover</h3>
-                                        <p class="car-subtitle">Sport 2024</p>
-                                    </div>
-                                    <div class="car-specs">
-                                        <div class="spec-item">
-                                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                                            </svg>
-                                            <span>2,000 km</span>
-                                        </div>
-                                        <div class="spec-item">
-                                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"></path>
-                                            </svg>
-                                            <span>Black</span>
-                                        </div>
-                                    </div>
-                                    <div class="car-footer">
-                                        <div>
-                                            <div class="car-price">$320</div>
-                                            <div class="price-label">per day</div>
-                                        </div>
-                                        <button class="view-more-button">View More</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Car 4 -->
-                        <div class="slider-item">
-                            <div class="car-card">
-                                <div class="car-image-container">
-                                    <img src="https://images.unsplash.com/photo-1669254383049-eb9462788446?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxsdXh1cnklMjBzZWRhbiUyMHdoaXRlfGVufDF8fHx8MTc2NDkwOTc0NHww&ixlib=rb-4.1.0&q=80&w=1080" alt="BMW 7 Series" class="car-image">
-                                    <div class="status-badge">
-                                        <span class="status-available">● Available</span>
-                                    </div>
-                                </div>
-                                <div class="car-details">
-                                    <div>
-                                        <h3 class="car-title">BMW</h3>
-                                        <p class="car-subtitle">7 Series 2023</p>
-                                    </div>
-                                    <div class="car-specs">
-                                        <div class="spec-item">
-                                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                                            </svg>
-                                            <span>10,000 km</span>
-                                        </div>
-                                        <div class="spec-item">
-                                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"></path>
-                                            </svg>
-                                            <span>White</span>
-                                        </div>
-                                    </div>
-                                    <div class="car-footer">
-                                        <div>
-                                            <div class="car-price">$280</div>
-                                            <div class="price-label">per day</div>
-                                        </div>
-                                        <button class="view-more-button">View More</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Car 5 -->
-                        <div class="slider-item">
-                            <div class="car-card">
-                                <div class="car-image-container">
-                                    <img src="https://images.unsplash.com/photo-1723847268845-6060bc118ea8?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwcmVtaXVtJTIwY2FyJTIwYmx1ZXxlbnwxfHx8fDE3NjQ5MzMyNzZ8MA&ixlib=rb-4.1.0&q=80&w=1080" alt="Audi RS7" class="car-image">
-                                    <div class="status-badge">
-                                        <span class="status-available">● Available</span>
-                                    </div>
-                                </div>
-                                <div class="car-details">
-                                    <div>
-                                        <h3 class="car-title">Audi</h3>
-                                        <p class="car-subtitle">RS7 2023</p>
-                                    </div>
-                                    <div class="car-specs">
-                                        <div class="spec-item">
-                                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                                            </svg>
-                                            <span>6,000 km</span>
-                                        </div>
-                                        <div class="spec-item">
-                                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"></path>
-                                            </svg>
-                                            <span>Blue</span>
-                                        </div>
-                                    </div>
-                                    <div class="car-footer">
-                                        <div>
-                                            <div class="car-price">$380</div>
-                                            <div class="price-label">per day</div>
-                                        </div>
-                                        <button class="view-more-button">View More</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Car 6 -->
-                        <div class="slider-item">
-                            <div class="car-card">
-                                <div class="car-image-container">
-                                    <img src="https://images.unsplash.com/photo-1742056024244-02a093dae0b5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxsdXh1cnklMjBzcG9ydHMlMjBjYXJ8ZW58MXx8fHwxNzY0OTMxNDk0fDA&ixlib=rb-4.1.0&q=80&w=1080" alt="Porsche 911 Turbo" class="car-image">
-                                    <div class="status-badge">
-                                        <span class="status-available">● Available</span>
-                                    </div>
-                                </div>
-                                <div class="car-details">
-                                    <div>
-                                        <h3 class="car-title">Porsche</h3>
-                                        <p class="car-subtitle">911 Turbo 2024</p>
-                                    </div>
-                                    <div class="car-specs">
-                                        <div class="spec-item">
-                                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                                            </svg>
-                                            <span>3,000 km</span>
-                                        </div>
-                                        <div class="spec-item">
-                                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"></path>
-                                            </svg>
-                                            <span>Silver</span>
-                                        </div>
-                                    </div>
-                                    <div class="car-footer">
-                                        <div>
-                                            <div class="car-price">$750</div>
-                                            <div class="price-label">per day</div>
-                                        </div>
-                                        <button class="view-more-button">View More</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Car 7 -->
-                        <div class="slider-item">
-                            <div class="car-card">
-                                <div class="car-image-container">
-                                    <img src="https://images.unsplash.com/photo-1764089859664-30aa6919ef0b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBzZWRhbiUyMGdyZXl8ZW58MXx8fHwxNzY0OTMzMjc3fDA&ixlib=rb-4.1.0&q=80&w=1080" alt="Audi A6" class="car-image">
-                                    <div class="status-badge">
-                                        <span class="status-available">● Available</span>
-                                    </div>
-                                </div>
-                                <div class="car-details">
-                                    <div>
-                                        <h3 class="car-title">Audi</h3>
-                                        <p class="car-subtitle">A6 2022</p>
-                                    </div>
-                                    <div class="car-specs">
-                                        <div class="spec-item">
-                                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                                            </svg>
-                                            <span>15,000 km</span>
-                                        </div>
-                                        <div class="spec-item">
-                                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"></path>
-                                            </svg>
-                                            <span>Grey</span>
-                                        </div>
-                                    </div>
-                                    <div class="car-footer">
-                                        <div>
-                                            <div class="car-price">$200</div>
-                                            <div class="price-label">per day</div>
-                                        </div>
-                                        <button class="view-more-button">View More</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Car 8 -->
-                        <div class="slider-item">
-                            <div class="car-card">
-                                <div class="car-image-container">
-                                    <img src="https://images.unsplash.com/photo-1549275087-77cdbc6fc013?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxsdXh1cnklMjB2ZWhpY2xlJTIwc2lsdmVyfGVufDF8fHx8MTc2NDkzMzI3N3ww&ixlib=rb-4.1.0&q=80&w=1080" alt="Lexus LS 500" class="car-image">
-                                    <div class="status-badge">
-                                        <span class="status-available">● Available</span>
-                                    </div>
-                                </div>
-                                <div class="car-details">
-                                    <div>
-                                        <h3 class="car-title">Lexus</h3>
-                                        <p class="car-subtitle">LS 500 2023</p>
-                                    </div>
-                                    <div class="car-specs">
-                                        <div class="spec-item">
-                                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                                            </svg>
-                                            <span>7,000 km</span>
-                                        </div>
-                                        <div class="spec-item">
-                                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"></path>
-                                            </svg>
-                                            <span>Silver</span>
-                                        </div>
-                                    </div>
-                                    <div class="car-footer">
-                                        <div>
-                                            <div class="car-price">$240</div>
-                                            <div class="price-label">per day</div>
-                                        </div>
-                                        <button class="view-more-button">View More</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- See More Card -->
-                        <div class="slider-item">
-                            <div class="see-more-card">
-                                <a href="index.php?page=browse" style="color:white;">
-                                    <div class="see-more-icon">
-                                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
-                                        </svg>
-                                    </div>
-                                </a>
-
-                                <h3 class="see-more-title">View All Cars</h3>
-                                <p class="see-more-text">
-                                    Explore our complete collection of luxury vehicles
-                                </p>
-                                <a href="index.php?page=browse">
-                                    <button class="see-more-button">
-                                        <span>See More</span>
-                                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
-                                        </svg>
-                                    </button>
-                                </a>
-
-                            </div>
-                        </div>
-                    </div>
-                </div>
-        </section>
-        <section class="section contact-section" id="contactus">
-            <div class="container">
-                <!-- Header -->
-                <div class="section-header">
-                    <span class="badge">Contact Us</span>
-                    <h2>Get In Touch</h2>
-                    <p>Have questions? Our luxury concierge team is ready to assist you 24/7</p>
-                </div>
-
-                <div class="contact-grid">
-                    <!-- Left Side - Contact Form -->
-                    <div>
-                        <div class="form-card">
-                            <h3>Send us a message</h3>
-                            <p class="subtitle">Fill out the form and we'll get back to you within 24 hours</p>
-
-                            <form>
-                                <div class="form-rowC">
-                                    <div class="form-group">
-                                        <label>First Name</label>
-                                        <input type="text" placeholder="John">
-                                    </div>
-                                    <div class="form-group">
-                                        <label>Last Name</label>
-                                        <input type="text" placeholder="Doe">
-                                    </div>
-                                </div>
-
-                                <div class="form-group">
-                                    <label>Email Address</label>
-                                    <input type="email" placeholder="john.doe@example.com">
-                                </div>
-
-                                <div class="form-group">
-                                    <label>Phone Number</label>
-                                    <input type="tel" placeholder="+1 (555) 000-0000">
-                                </div>
-
-                                <div class="form-group">
-                                    <label>Message</label>
-                                    <textarea placeholder="Tell us about your luxury car rental needs..."></textarea>
-                                </div>
-
-                                <button type="submit" class="submit-btn">
-                                    Send Message
-                                    <svg class="icon" viewBox="0 0 24 24">
-                                        <path d="M5 12h14M12 5l7 7-7 7" />
-                                    </svg>
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-
-                    <!-- Right Side - Contact Info -->
-                    <div class="info-cards">
-                        <!-- Quick Contact Card -->
-                        <div class="quick-contact-card">
-                            <h4>Quick Contact</h4>
-                            <div class="contact-item">
-                                <svg class="icon" viewBox="0 0 24 24">
-                                    <path d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                                </svg>
-                                <div>
-                                    <div class="contact-item-label">Phone</div>
-                                    <div class="contact-item-value">+1 (555) 123-4567</div>
-                                </div>
-                            </div>
-                            <div class="contact-item">
-                                <svg class="icon" viewBox="0 0 24 24">
-                                    <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                </svg>
-                                <div>
-                                    <div class="contact-item-label">Email</div>
-                                    <div class="contact-item-value">info@luxedrive.com</div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Visit Us Card -->
-                        <div class="glass-card">
-                            <div class="location-header">
-                                <div class="icon-box">
-                                    <svg class="icon-large" viewBox="0 0 24 24">
-                                        <path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                        <path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                                    </svg>
-                                </div>
-                                <div>
-                                    <h4>Visit Our Showroom</h4>
-                                    <p class="subtitle">Experience luxury in person</p>
-                                </div>
-                            </div>
-                            <p class="address">123 Luxury Avenue</p>
-                            <p class="address">Monaco, MC 98000</p>
-
-                            <div class="divider"></div>
-
-                            <div class="hours-header">
-                                <svg class="icon" viewBox="0 0 24 24" style="color: #FF5722;">
-                                    <circle cx="12" cy="12" r="10" />
-                                    <path d="M12 6v6l4 2" />
-                                </svg>
-                                <span>Business Hours</span>
-                            </div>
-                            <p class="hours-text">Mon - Fri: 8:00 AM - 8:00 PM</p>
-                            <p class="hours-text">Sat - Sun: 9:00 AM - 6:00 PM</p>
-                            <p class="emergency">24/7 Emergency Assistance</p>
-                        </div>
-
-                        <!-- Social Media Card -->
-                        <div class="glass-card">
-                            <h4 style="margin-bottom: 1.5rem;">Follow Our Journey</h4>
-                            <div class="social-icons">
-                                <a href="#" class="social-icon">
-                                    <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-                                        <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z" />
-                                    </svg>
-                                </a>
-                                <a href="#" class="social-icon">
-                                    <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-                                        <path d="M23 3a10.9 10.9 0 01-3.14 1.53 4.48 4.48 0 00-7.86 3v1A10.66 10.66 0 013 4s-4 9 5 13a11.64 11.64 0 01-7 2c9 5 20 0 20-11.5a4.5 4.5 0 00-.08-.83A7.72 7.72 0 0023 3z" />
-                                    </svg>
-                                </a>
-                                <a href="#" class="social-icon">
-                                    <svg class="icon" viewBox="0 0 24 24">
-                                        <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
-                                        <path d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37zm1.5-4.87h.01" />
-                                    </svg>
-                                </a>
-                                <a href="#" class="social-icon">
-                                    <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-                                        <path d="M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6zM2 9h4v12H2z" />
-                                        <circle cx="4" cy="4" r="2" />
-                                    </svg>
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-        <section class="section CTA-section">
-            <div class="container flex flex-col" style="align-items: center;">
-                <!-- CTA -->
-                <div class="cta-container">
-                    <div class="cta-background"></div>
-                    <div class="cta-blur-container">
-                        <div class="cta-blur-1"></div>
-                        <div class="cta-blur-2"></div>
-                    </div>
-                    <div class="cta-content">
-                        <h3 class="cta-title">Start your journey</h3>
-                        <p class="cta-text">
-                            Experience the thrill of driving luxury cars from the world's most prestigious brands
-                        </p>
-                        <div class="cta-buttons">
-                            <a href="index.php?page=browse"><button class="cta-button cta-button-primary">Browse Our Fleet</button></a>
-                            <a href="index.php?page=home#contactus"><button class="cta-button cta-button-secondary">Contact Us</button></a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- car slide script -->
         <script>
-            // Slider functionality
-            const sliderTrack = document.getElementById('sliderTrack');
-            const prevBtn = document.getElementById('prevBtn');
-            const nextBtn = document.getElementById('nextBtn');
-
-            let currentIndex = 0;
-            const itemsPerPage = 2.4;
-            const totalItems = 9; // 8 cars + 1 see more card
-            const maxIndex = Math.max(0, totalItems - itemsPerPage);
-
-            function updateSlider() {
-                const translateX = -(currentIndex * (100 / itemsPerPage));
-                sliderTrack.style.transform = `translateX(${translateX}%)`;
-            }
-
-            prevBtn.addEventListener('click', () => {
-                if (currentIndex > 0) {
-                    currentIndex--;
-                    updateSlider();
-                }
-            });
-
-            nextBtn.addEventListener('click', () => {
-                if (currentIndex < maxIndex) {
-                    currentIndex++;
-                    updateSlider();
-                }
-            });
-
-            // drop down 
+            // Dropdown menu
             const toggleBtn = document.querySelector(".dropdown-toggle");
             const menu = document.querySelector(".dropdown-menu");
-
-            toggleBtn.addEventListener("click", () => {
-                menu.classList.toggle("show");
-            });
-
-            // Close dropdown when clicking outside
-            document.addEventListener("click", (e) => {
-                if (!document.querySelector(".user-dropdown").contains(e.target)) {
-                    menu.classList.remove("show");
-                }
-            });
+            if (toggleBtn && menu) {
+                toggleBtn.addEventListener("click", () => menu.classList.toggle("show"));
+                document.addEventListener("click", (e) => {
+                    if (!document.querySelector(".user-dropdown")?.contains(e.target)) {
+                        menu.classList.remove("show");
+                    }
+                });
+            }
         </script>
+    </body>
 
-    <?php
+    </html>
+<?php
     }
-    function renderBrowseCars()
+
+    // ============================================
+    // HOME PAGE
+    // ============================================
+    function renderHomePage()
     {
-    ?>
-        <main class="main">
-            <section class="browse-section">
-                <div class="container">
-                    <div class="browse-header">
-                        <h2>Browse Available Cars</h2>
-                        <p class="browse-subtitle">Choose from our exclusive collection of luxury vehicles</p>
+        $cars = getCars(['status' => 'available']);
+?>
+    <section class="section hero_section">
+        <div class="container flex-center hero_container" style="color: white; flex-direction: column; text-align: center;">
+            <h1>DON'T RENT A CAR.</h1>
+            <h1>RENT THE CAR.</h1>
+            <p class="p_hero">Premium car rental at affordable rates. Worldwide.</p>
+            <div class="btn_hero flex gap-2">
+                <a href="?page=browse" class="btn btn-brws">Browse Our Fleet</a>
+                <?php if (isLoggedIn()) { ?>
+                    <a href="?page=browse" class="btn btn-bok">Book Now</a>
+                <?php } else { ?>
+                    <a href="?page=auth" class="btn btn-bok">Book Now</a>
+                <?php } ?>
+            </div>
+            <form method="GET" action="index.php" class="search-form flex-column">
+                <input type="hidden" name="page" value="browse">
+                <div class="flex gap-2 form-row">
+                    <div class="form-group">
+                        <label class="form-label">Pick-up Date</label>
+                        <input type="date" name="start_date" class="form-input" required>
                     </div>
+                    <div class="form-group">
+                        <label class="form-label">Return Date</label>
+                        <input type="date" name="end_date" class="form-input" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Car Type</label>
+                        <select name="car_type" class="form-input">
+                            <option value="">All Types</option>
+                            <option value="Luxury">Luxury</option>
+                            <option value="SUV">SUV</option>
+                            <option value="Sports">Sports</option>
+                        </select>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-brws btn-serch" style="width: 100%;">Find Available Cars</button>
+            </form>
+        </div>
+    </section>
 
-                    <!-- Filter Form -->
-                    <form method="GET" action="?page=browse" class="browse-search-form">
-                        <div class="flex gap-2 form-row">
-                            <div class="form-group">
-                                <label class="form-label">Pick-up Date</label>
-                                <input type="date" name="start_date" class="form-input" required>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Return Date</label>
-                                <input type="date" name="end_date" class="form-input" required>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Car Type</label>
-                                <select name="car_type" class="form-input browse-select">
-                                    <option value="">All Types</option>
-                                    <option value="sedan">Sedan</option>
-                                    <option value="suv">SUV</option>
-                                    <option value="luxury">Luxury</option>
-                                    <option value="sports">Sports</option>
-                                </select>
-                            </div>
+    <section class="stats">
+        <div class="stats-grid">
+            <div class="stat-item">
+                <h3>350+</h3>
+                <p>Exclusive Vehicles</p>
+            </div>
+            <div class="stat-item">
+                <h3>105</h3>
+                <p>Countries Worldwide</p>
+            </div>
+            <div class="stat-item">
+                <h3>24/7</h3>
+                <p>Customer Support</p>
+            </div>
+            <div class="stat-item">
+                <h3>2000+</h3>
+                <p>Satisfied Customers</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="section why-choose-section">
+        <div class="decorative-blur-1"></div>
+        <div class="decorative-blur-2"></div>
+        <div class="container">
+            <div class="section-header flex-center flex-col">
+                <div><span class="badge">Premium Benefits</span></div>
+                <h2 class="main-title">Why choose <span class="italic">LUXDRIVE</span>?</h2>
+                <p class="subtitle">Experience unparalleled luxury with world-class service</p>
+            </div>
+            <div class="grid-main">
+                <div class="featured-card">
+                    <div class="card-blur"></div>
+                    <div class="card-content">
+                        <div class="icon-box">
+                            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"></path>
+                            </svg>
                         </div>
-                        <button type="submit" class="btn btn-brws btn-serch">Find Available Cars</button>
-                    </form>
+                        <h3 class="card-title">Premium Fleet</h3>
+                        <p class="card-description">Drive the finest luxury vehicles from brands like Ferrari, Lamborghini, Rolls-Royce, and more.</p>
+                        <div class="stat-display">
+                            <div class="stat-number">350+</div>
+                            <div class="stat-label">Exclusive vehicles</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="stacked-cards">
+                    <div class="white-card">
+                        <div class="small-icon-box"><svg class="small-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"></path>
+                            </svg></div>
+                        <h3 class="small-title">Best Prices</h3>
+                        <p class="small-description">Transparent pricing with no hidden fees. Premium quality at competitive rates.</p>
+                    </div>
+                    <div class="white-card">
+                        <div class="small-icon-box"><svg class="small-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
+                            </svg></div>
+                        <h3 class="small-title">24/7 Support</h3>
+                        <p class="small-description">Dedicated concierge service available around the clock, wherever you are.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="grid-bottom">
+                <div class="gradient-card">
+                    <div class="gradient-blur"></div>
+                    <div class="card-content"><svg class="icon" style="width: 3rem; height: 3rem; margin-bottom: 1rem; opacity: 0.9;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        </svg>
+                        <h3 class="small-title">Global Coverage</h3>
+                        <p style="color: rgba(255, 255, 255, 0.9);">Available in 105 countries with thousands of locations.</p>
+                    </div>
+                </div>
+                <div class="white-card">
+                    <div class="small-icon-box"><svg class="small-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg></div>
+                    <h3 class="small-title">Instant Booking</h3>
+                    <p class="small-description">Reserve your dream car in minutes with immediate confirmation.</p>
+                </div>
+                <div class="white-card">
+                    <div class="small-icon-box"><svg class="small-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                        </svg></div>
+                    <h3 class="small-title">Fully Insured</h3>
+                    <p class="small-description">Comprehensive coverage on all vehicles for complete peace of mind.</p>
+                </div>
+            </div>
+        </div>
+    </section>
 
-                    <!-- Car Grid -->
-                    <div class="browse-grid">
-                        <?php
-                        $cars = [
-                            ['name' => 'Mercedes-Benz', 'model' => 'S-Class 2023', 'price' => 250, 'image' => 'https://images.unsplash.com/photo-1758216383800-7023ee8ed42b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxsdXh1cnklMjBjYXIlMjBzZWRhbnxlbnwxfHx8fDE3NjQ5MzE4MzJ8MA&ixlib=rb-4.1.0&q=80&w=1080'],
-                            ['name' => 'BMW', 'model' => '7 Series', 'price' => 280, 'image' => 'https://images.unsplash.com/photo-1555215695-3004980ad54e?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D'],
-                            ['name' => 'Audi', 'model' => 'RS e-tron GT', 'price' => 320, 'image' => 'https://images.unsplash.com/photo-1617788138017-80ad40651399?w=800&q=80'],
-                            ['name' => 'Porsche', 'model' => 'Panamera', 'price' => 350, 'image' => 'https://images.unsplash.com/photo-1601679147136-22d1032399e4?q=80&w=1112&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D'],
-                            ['name' => 'Range Rover', 'model' => 'Autobiography', 'price' => 300, 'image' => 'https://images.unsplash.com/photo-1601362840469-51e4d8d58785?w=800&q=80'],
-                            ['name' => 'Bentley', 'model' => 'Continental GT', 'price' => 450, 'image' => 'https://images.unsplash.com/photo-1563720223185-11003d516935?w=800&q=80'],
-                        ];
+    <section class="section how-it-works-section">
+        <div class="container">
+            <div class="section-header">
+                <div><span class="badge">Simple Process</span></div>
+                <h2 class="main-title">How it works</h2>
+                <p class="subtitle">Get on the road in three easy steps</p>
+            </div>
+            <div class="timeline-container">
+                <div class="timeline-line"></div>
+                <div class="steps-grid">
+                    <div class="step">
+                        <div class="step-icon"><svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                            </svg></div>
+                        <div class="step-number">01</div>
+                        <h3 class="step-title">Search and select</h3>
+                        <p class="step-description">Browse our premium collection and filter by brand, type, or features.</p>
+                    </div>
+                    <div class="step">
+                        <div class="step-icon"><svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                            </svg></div>
+                        <div class="step-number">02</div>
+                        <h3 class="step-title">Book and customize</h3>
+                        <p class="step-description">Select dates, add extras, and get instant confirmation.</p>
+                    </div>
+                    <div class="step">
+                        <div class="step-icon"><svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+                            </svg></div>
+                        <div class="step-number">03</div>
+                        <h3 class="step-title">Pick up and drive</h3>
+                        <p class="step-description">Complete quick paperwork and hit the road in your dream car.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
 
-                        foreach ($cars as $car) {
-                        ?>
+    <section class="section fleet-section" style="margin-top: -10rem;">
+        <div class="container flex flex-col" style="align-items: center;">
+            <div style="margin-bottom: 1rem;"><span class="badge" style="margin-bottom: 3rem;">Our Collection</span></div>
+            <div class="section-header flex-space">
+                <div class="header-content">
+                    <h2>Explore our fleet</h2>
+                    <p class="header-subtitle">Choose from our premium selection of luxury vehicles</p>
+                </div>
+                <div class="nav-buttons">
+                    <button class="nav-button" id="prevBtn"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                        </svg></button>
+                    <button class="nav-button" id="nextBtn"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                        </svg></button>
+                </div>
+            </div>
+            <div class="slider-container">
+                <div class="slider-track" id="sliderTrack">
+                    <?php foreach (array_slice($cars, 0, 8) as $car): ?>
+                        <div class="slider-item">
                             <div class="car-card">
                                 <div class="car-image-container">
-                                    <img src="<?php echo $car['image']; ?>" alt="<?php echo $car['name']; ?>" class="car-image">
-                                    <div class="status-badge">
-                                        <span class="status-available">● Available</span>
-                                    </div>
+                                    <img src="<?php echo htmlspecialchars($car['image_url'] ?: 'https://images.unsplash.com/photo-1618843479313-40f8afb4b4d8?w=800&q=80'); ?>" alt="<?php echo htmlspecialchars($car['brand']); ?>" class="car-image">
+                                    <div class="status-badge"><span class="status-available">● Available</span></div>
                                 </div>
                                 <div class="car-details">
                                     <div>
-                                        <h3 class="car-title"><?php echo $car['name']; ?></h3>
-                                        <p class="car-subtitle"><?php echo $car['model']; ?></p>
+                                        <h3 class="car-title"><?php echo htmlspecialchars($car['brand']); ?></h3>
+                                        <p class="car-subtitle"><?php echo htmlspecialchars($car['model'] . ' ' . $car['year']); ?></p>
                                     </div>
                                     <div class="car-specs">
-                                        <div class="spec-item">
-                                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <div class="spec-item"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                                            </svg>
-                                            <span>5,000 km</span>
-                                        </div>
-                                        <div class="spec-item">
-                                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            </svg><span><?php echo number_format($car['mileage']); ?> km</span></div>
+                                        <div class="spec-item"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"></path>
-                                            </svg>
-                                            <span>Black</span>
-                                        </div>
+                                            </svg><span><?php echo htmlspecialchars($car['color']); ?></span></div>
                                     </div>
                                     <div class="car-footer">
                                         <div>
-                                            <div class="car-price">$<?php echo $car['price']; ?></div>
+                                            <div class="car-price">$<?php echo number_format($car['daily_price']); ?></div>
                                             <div class="price-label">per day</div>
                                         </div>
-                                        <a href="index.php?page=car-details&id=1" style="text-decoration: none;">
-                                            <button class="view-more-button">
-                                                View More
-                                            </button>
-                                        </a>
+                                        <a href="index.php?page=car-details&id=<?php echo $car['car_id']; ?>"><button class="view-more-button">View More</button></a>
                                     </div>
                                 </div>
                             </div>
-                        <?php } ?>
+                        </div>
+                    <?php endforeach; ?>
+                    <div class="slider-item">
+                        <div class="see-more-card">
+                            <a href="index.php?page=browse" style="color:white;">
+                                <div class="see-more-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                                    </svg></div>
+                            </a>
+                            <h3 class="see-more-title">View All Cars</h3>
+                            <p class="see-more-text">Explore our complete collection of luxury vehicles</p>
+                            <a href="index.php?page=browse"><button class="see-more-button"><span>See More</span><svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                                    </svg></button></a>
+                        </div>
                     </div>
                 </div>
-            </section>
-        </main>
-    <?php
+            </div>
+        </div>
+    </section>
+
+    <section class="section contact-section" id="contactus">
+        <div class="container">
+            <div class="section-header"><span class="badge">Contact Us</span>
+                <h2>Get In Touch</h2>
+                <p>Have questions? Our luxury concierge team is ready to assist you 24/7</p>
+            </div>
+            <div class="contact-grid">
+                <div>
+                    <div class="form-card">
+                        <h3>Send us a message</h3>
+                        <p class="subtitle">Fill out the form and we'll get back to you within 24 hours</p>
+                        <form>
+                            <div class="form-rowC">
+                                <div class="form-group"><label>First Name</label><input type="text" placeholder="John"></div>
+                                <div class="form-group"><label>Last Name</label><input type="text" placeholder="Doe"></div>
+                            </div>
+                            <div class="form-group"><label>Email Address</label><input type="email" placeholder="john.doe@example.com"></div>
+                            <div class="form-group"><label>Phone Number</label><input type="tel" placeholder="+1 (555) 000-0000"></div>
+                            <div class="form-group"><label>Message</label><textarea placeholder="Tell us about your luxury car rental needs..."></textarea></div>
+                            <button type="submit" class="submit-btn">Send Message<svg class="icon" viewBox="0 0 24 24">
+                                    <path d="M5 12h14M12 5l7 7-7 7" />
+                                </svg></button>
+                        </form>
+                    </div>
+                </div>
+                <div class="info-cards">
+                    <div class="quick-contact-card">
+                        <h4>Quick Contact</h4>
+                        <div class="contact-item"><svg class="icon" viewBox="0 0 24 24">
+                                <path d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                            </svg>
+                            <div>
+                                <div class="contact-item-label">Phone</div>
+                                <div class="contact-item-value">+1 (555) 123-4567</div>
+                            </div>
+                        </div>
+                        <div class="contact-item"><svg class="icon" viewBox="0 0 24 24">
+                                <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            </svg>
+                            <div>
+                                <div class="contact-item-label">Email</div>
+                                <div class="contact-item-value">info@luxedrive.com</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass-card">
+                        <div class="location-header">
+                            <div class="icon-box"><svg class="icon-large" viewBox="0 0 24 24">
+                                    <path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                    <path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg></div>
+                            <div>
+                                <h4>Visit Our Showroom</h4>
+                                <p class="subtitle">Experience luxury in person</p>
+                            </div>
+                        </div>
+                        <p class="address">123 Luxury Avenue</p>
+                        <p class="address">Monaco, MC 98000</p>
+                        <div class="divider"></div>
+                        <div class="hours-header"><svg class="icon" viewBox="0 0 24 24" style="color: #FF5722;">
+                                <circle cx="12" cy="12" r="10" />
+                                <path d="M12 6v6l4 2" />
+                            </svg><span>Business Hours</span></div>
+                        <p class="hours-text">Mon - Fri: 8:00 AM - 8:00 PM</p>
+                        <p class="hours-text">Sat - Sun: 9:00 AM - 6:00 PM</p>
+                        <p class="emergency">24/7 Emergency Assistance</p>
+                    </div>
+                    <div class="glass-card">
+                        <h4 style="margin-bottom: 1.5rem;">Follow Our Journey</h4>
+                        <div class="social-icons"><a href="#" class="social-icon"><svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                                    <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z" />
+                                </svg></a><a href="#" class="social-icon"><svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                                    <path d="M23 3a10.9 10.9 0 01-3.14 1.53 4.48 4.48 0 00-7.86 3v1A10.66 10.66 0 013 4s-4 9 5 13a11.64 11.64 0 01-7 2c9 5 20 0 20-11.5a4.5 4.5 0 00-.08-.83A7.72 7.72 0 0023 3z" />
+                                </svg></a><a href="#" class="social-icon"><svg class="icon" viewBox="0 0 24 24">
+                                    <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+                                    <path d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37zm1.5-4.87h.01" />
+                                </svg></a><a href="#" class="social-icon"><svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                                    <path d="M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6zM2 9h4v12H2z" />
+                                    <circle cx="4" cy="4" r="2" />
+                                </svg></a></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section CTA-section">
+        <div class="container flex flex-col" style="align-items: center;">
+            <div class="cta-container">
+                <div class="cta-background"></div>
+                <div class="cta-blur-container">
+                    <div class="cta-blur-1"></div>
+                    <div class="cta-blur-2"></div>
+                </div>
+                <div class="cta-content">
+                    <h3 class="cta-title">Start your journey</h3>
+                    <p class="cta-text">Experience the thrill of driving luxury cars from the world's most prestigious brands</p>
+                    <div class="cta-buttons">
+                        <a href="index.php?page=browse"><button class="cta-button cta-button-primary">Browse Our Fleet</button></a>
+                        <a href="index.php?page=home#contactus"><button class="cta-button cta-button-secondary">Contact Us</button></a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        const sliderTrack = document.getElementById('sliderTrack');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        let currentIndex = 0;
+        const itemsPerPage = 2.4;
+        const totalItems = sliderTrack ? sliderTrack.children.length : 0;
+        const maxIndex = Math.max(0, totalItems - itemsPerPage);
+
+        function updateSlider() {
+            if (sliderTrack) sliderTrack.style.transform = `translateX(${-(currentIndex * (100 / itemsPerPage))}%)`;
+        }
+        if (prevBtn) prevBtn.addEventListener('click', () => {
+            if (currentIndex > 0) {
+                currentIndex--;
+                updateSlider();
+            }
+        });
+        if (nextBtn) nextBtn.addEventListener('click', () => {
+            if (currentIndex < maxIndex) {
+                currentIndex++;
+                updateSlider();
+            }
+        });
+    </script>
+<?php
     }
+
+    // ============================================
+    // BROWSE CARS PAGE
+    // ============================================
+    function renderBrowseCars()
+    {
+        $filters = ['status' => 'available'];
+        if (!empty($_GET['car_type'])) $filters['car_type'] = sanitize($_GET['car_type']);
+        $cars = getCars($filters);
+?>
+    <section class="browse-section">
+        <div class="container">
+            <div class="browse-header">
+                <h2>Browse Available Cars</h2>
+                <p class="browse-subtitle">Choose from our exclusive collection of luxury vehicles</p>
+            </div>
+            <form method="GET" action="index.php" class="browse-search-form">
+                <input type="hidden" name="page" value="browse">
+                <div class="flex gap-2 form-row">
+                    <div class="form-group"><label class="form-label">Pick-up Date</label><input type="date" name="start_date" class="form-input" value="<?php echo htmlspecialchars($_GET['start_date'] ?? ''); ?>"></div>
+                    <div class="form-group"><label class="form-label">Return Date</label><input type="date" name="end_date" class="form-input" value="<?php echo htmlspecialchars($_GET['end_date'] ?? ''); ?>"></div>
+                    <div class="form-group"><label class="form-label">Car Type</label>
+                        <select name="car_type" class="form-input browse-select">
+                            <option value="">All Types</option>
+                            <option value="Luxury" <?php echo ($_GET['car_type'] ?? '') === 'Luxury' ? 'selected' : ''; ?>>Luxury</option>
+                            <option value="SUV" <?php echo ($_GET['car_type'] ?? '') === 'SUV' ? 'selected' : ''; ?>>SUV</option>
+                            <option value="Sports" <?php echo ($_GET['car_type'] ?? '') === 'Sports' ? 'selected' : ''; ?>>Sports</option>
+                        </select>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-brws btn-serch">Find Available Cars</button>
+            </form>
+            <div class="browse-grid">
+                <?php foreach ($cars as $car): ?>
+                    <div class="car-card">
+                        <div class="car-image-container">
+                            <img src="<?php echo htmlspecialchars($car['image_url'] ?: 'https://images.unsplash.com/photo-1618843479313-40f8afb4b4d8?w=800&q=80'); ?>" alt="<?php echo htmlspecialchars($car['brand']); ?>" class="car-image">
+                            <div class="status-badge"><span class="status-available">● Available</span></div>
+                        </div>
+                        <div class="car-details">
+                            <div>
+                                <h3 class="car-title"><?php echo htmlspecialchars($car['brand']); ?></h3>
+                                <p class="car-subtitle"><?php echo htmlspecialchars($car['model']); ?></p>
+                            </div>
+                            <div class="car-specs">
+                                <div class="spec-item"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                                    </svg><span><?php echo number_format($car['mileage']); ?> km</span></div>
+                                <div class="spec-item"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"></path>
+                                    </svg><span><?php echo htmlspecialchars($car['color']); ?></span></div>
+                            </div>
+                            <div class="car-footer">
+                                <div>
+                                    <div class="car-price">$<?php echo number_format($car['daily_price']); ?></div>
+                                    <div class="price-label">per day</div>
+                                </div>
+                                <a href="index.php?page=car-details&id=<?php echo $car['car_id']; ?>" style="text-decoration: none;"><button class="view-more-button">View More</button></a>
+                            </div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+                <?php if (empty($cars)): ?>
+                    <div style="grid-column: 1/-1; text-align: center; padding: 3rem;">
+                        <h3>No cars available matching your criteria</h3>
+                        <p>Try adjusting your filters</p>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </section>
+<?php
+    }
+
+    // ============================================
+    // CAR DETAILS PAGE
+    // ============================================
     function renderCarDetails()
     {
-        // Mock car data - normally this would come from the database based on $_GET['id']
-        $car = [
-            'name' => 'Mercedes-Benz',
-            'model' => 'C-Class',
-            'year' => '2023',
-            'type' => 'Sedan',
-            'price' => 120,
-            'image' => 'https://images.unsplash.com/photo-1618843479313-40f8afb4b4d8?w=800&q=80',
-            'gallery' => [
-                'https://images.unsplash.com/photo-1617788138017-80ad40651399?w=800&q=80',
-                'https://images.unsplash.com/photo-1605559424843-9e4c228bf1c2?w=800&q=80',
-                'https://images.unsplash.com/photo-1555215695-3004980ad54e?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
-                'https://images.unsplash.com/photo-1601679147136-22d1032399e4?q=80&w=1112&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D'
-            ],
-            'specs' => [
-                'Seats' => '5 Passengers',
-                'Transmission' => 'Automatic',
-                'Fuel Type' => 'Gasoline',
-                'Mileage' => '12,000 mi'
-            ],
-            'features' => ['GPS', 'Bluetooth', 'Sunroof', 'Leather Seats'],
-            'info' => [
-                'Color' => 'Silver',
-                'License Plate' => 'DEF456',
-                'Year' => '2023'
-            ]
-        ];
-    ?>
-        <main class="main car-details-main">
-            <div class="container">
-                <!-- Back Navigation -->
-                <div class="back-nav">
-                    <a href="index.php?page=browse" class="back-link">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M19 12H5M12 19l-7-7 7-7" />
-                        </svg>
-                        Back to Browse
-                    </a>
-                </div>
-
-                <div class="details-grid">
-                    <!-- Left Column: Gallery -->
-                    <div class="gallery-container">
-                        <img src="<?php echo $car['image']; ?>" alt="<?php echo $car['name']; ?>" class="main-image" id="mainImage">
-                        <div class="thumbnail-grid">
-                            <img src="<?php echo $car['image']; ?>" class="thumbnail" onclick="changeImage(this.src)">
-                            <?php foreach ($car['gallery'] as $img): ?>
-                                <img src="<?php echo $img; ?>" class="thumbnail" onclick="changeImage(this.src)">
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-
-                    <!-- Right Column: Details -->
-                    <div class="car-info-wrapper">
-                        <div class="car-info-header">
-                            <div class="flex-space" style="align-items: flex-start;">
-                                <div>
-                                    <h1 class="detail-title"><?php echo $car['name']; ?> <br> <?php echo $car['model']; ?></h1>
-                                    <p class="detail-model"><?php echo $car['year']; ?> • <?php echo $car['type']; ?></p>
-                                </div>
-                                <span class="status-badge" style="position: static; background: #dcfce7; color: #16a34a;">Available</span>
-                            </div>
-
-                            <div class="detail-price-box">
-                                <span class="detail-price">$<?php echo $car['price']; ?></span>
-                                <span class="detail-price-label">/day</span>
-                            </div>
-                        </div>
-
-                        <div class="specs-section">
-                            <h3 class="section-label">Specifications</h3>
-                            <div class="specs-grid">
-                                <?php foreach ($car['specs'] as $label => $value): ?>
-                                    <div class="spec-detail-item">
-                                        <div class="spec-icon">
-                                            <?php if ($label == 'Seats') {
-                                                echo '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17l-5-5 5-5M17 7l5 5-5 5"/></svg>'; ?>
-                                            <?php } else { ?>
-                                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                    <circle cx="12" cy="12" r="10"></circle>
-                                                    <path d="M12 6v6l4 2"></path>
-                                                </svg>
-                                            <?php } ?>
-                                        </div>
-                                        <div class="spec-content">
-                                            <label><?php echo $label; ?></label>
-                                            <span><?php echo $value; ?></span>
-                                        </div>
-                                    </div>
-                                <?php endforeach; ?>
-                            </div>
-                        </div>
-
-                        <div class="features-section">
-                            <h3 class="section-label">Features</h3>
-                            <div class="features-list">
-                                <?php foreach ($car['features'] as $feature): ?>
-                                    <div class="feature-check">
-                                        <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                                            <polyline points="20 6 9 17 4 12"></polyline>
-                                        </svg>
-                                        <?php echo $feature; ?>
-                                    </div>
-                                <?php endforeach; ?>
-                            </div>
-                        </div>
-
-                        <div class="info-section">
-                            <h3 class="section-label">Additional Information</h3>
-                            <?php foreach ($car['info'] as $label => $value): ?>
-                                <div class="info-row">
-                                    <span class="info-label"><?php echo $label; ?></span>
-                                    <span class="info-value"><?php echo $value; ?></span>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
-
-                        <!-- Changed: Book Now button opens modal -->
-                        <button class="book-now-btn" onclick="openBookingModal(<?php echo $car['price']; ?>, '<?php echo htmlspecialchars($car['name'] . ' ' . $car['model'], ENT_QUOTES); ?>')">
-                            Book This Car
-                        </button>
-                    </div>
-                </div>
+        $carId = intval($_GET['id'] ?? 0);
+        $car = getCarById($carId);
+        if (!$car) {
+            echo '<div class="container" style="padding: 3rem; text-align: center;"><h2>Car not found</h2><a href="index.php?page=browse">Back to Browse</a></div>';
+            return;
+        }
+        global $bookingResult;
+?>
+    <div class="container details-section">
+        <div class="back-nav"><a href="index.php?page=browse" class="back-link"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7" />
+                </svg> Back to Browse</a></div>
+        <div class="details-grid">
+            <div class="gallery-container">
+                <img src="<?php echo htmlspecialchars($car['image_url'] ?: 'https://images.unsplash.com/photo-1618843479313-40f8afb4b4d8?w=800&q=80'); ?>" alt="<?php echo htmlspecialchars($car['brand']); ?>" class="main-image" id="mainImage">
             </div>
-
-            <!-- ===== BOOKING MODALS ===== -->
-            <?php includeBookingModals(); ?>
-
-            <script>
-                function changeImage(src) {
-                    document.getElementById('mainImage').src = src;
-                }
-            </script>
-        </main>
-    <?php
+            <div class="car-info-wrapper">
+                <div class="car-info-header">
+                    <div class="flex-space" style="align-items: flex-start;">
+                        <div>
+                            <h1 class="detail-title"><?php echo htmlspecialchars($car['brand']); ?> <br> <?php echo htmlspecialchars($car['model']); ?></h1>
+                            <p class="detail-model"><?php echo $car['year']; ?> • <?php echo htmlspecialchars($car['car_type']); ?></p>
+                        </div>
+                        <span class="status-badge" style="position: static; background: #dcfce7; color: #16a34a;">Available</span>
+                    </div>
+                    <div class="detail-price-box"><span class="detail-price">$<?php echo number_format($car['daily_price']); ?></span><span class="detail-price-label">/day</span></div>
+                </div>
+                <div class="specs-section">
+                    <h3 class="section-label">Specifications</h3>
+                    <div class="specs-grid">
+                        <div class="spec-detail-item">
+                            <div class="spec-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                                    <circle cx="9" cy="7" r="4" />
+                                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                                </svg></div>
+                            <div class="spec-content"><label>Seats</label><span><?php echo $car['seats']; ?> Passengers</span></div>
+                        </div>
+                        <div class="spec-detail-item">
+                            <div class="spec-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <path d="M12 6v6l4 2" />
+                                </svg></div>
+                            <div class="spec-content"><label>Transmission</label><span><?php echo htmlspecialchars($car['transmission']); ?></span></div>
+                        </div>
+                        <div class="spec-detail-item">
+                            <div class="spec-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M3 3v18h18" />
+                                    <path d="M18 17V9" />
+                                    <path d="M13 17V5" />
+                                    <path d="M8 17v-3" />
+                                </svg></div>
+                            <div class="spec-content"><label>Fuel Type</label><span><?php echo htmlspecialchars($car['fuel_type']); ?></span></div>
+                        </div>
+                        <div class="spec-detail-item">
+                            <div class="spec-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg></div>
+                            <div class="spec-content"><label>Mileage</label><span><?php echo number_format($car['mileage']); ?> km</span></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="features-section">
+                    <h3 class="section-label">Features</h3>
+                    <div class="features-list">
+                        <?php foreach (['GPS Navigation', 'Bluetooth', 'Leather Seats', 'Sunroof'] as $feature): ?>
+                            <div class="feature-check"><svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg><?php echo $feature; ?></div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+                <div class="info-section">
+                    <h3 class="section-label">Additional Information</h3>
+                    <div class="info-row"><span class="info-label">Color</span><span class="info-value"><?php echo htmlspecialchars($car['color']); ?></span></div>
+                    <div class="info-row"><span class="info-label">License Plate</span><span class="info-value"><?php echo htmlspecialchars($car['license_plate']); ?></span></div>
+                    <div class="info-row"><span class="info-label">Year</span><span class="info-value"><?php echo $car['year']; ?></span></div>
+                </div>
+                <?php if (isClient()): ?>
+                    <button class="book-now-btn" onclick="openBookingModal(<?php echo $car['daily_price']; ?>, '<?php echo htmlspecialchars($car['brand'] . ' ' . $car['model'], ENT_QUOTES); ?>', <?php echo $car['car_id']; ?>)">Book This Car</button>
+                <?php else: ?>
+                    <a href="index.php?page=auth" class="book-now-btn" style="display: block; text-align: center; text-decoration: none;">Login to Book</a>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+    <?php if (isClient()) includeBookingModals($car); ?>
+<?php
     }
-    function includeBookingModals()
+
+    function includeBookingModals($car)
     {
-    ?>
-        <!-- Step 1: Select Dates Modal -->
-        <div id="booking-modal-step1" class="booking-modal">
-            <div class="booking-modal-content">
-                <div class="booking-modal-header">
-                    <h2 id="modal-car-title">Book Car</h2>
-                    <button class="booking-modal-close" onclick="closeBookingModal('step1')">&times;</button>
+?>
+    <div id="booking-modal-step1" class="booking-modal">
+        <div class="booking-modal-content">
+            <div class="booking-modal-header">
+                <h2 id="modal-car-title">Book <?php echo htmlspecialchars($car['brand'] . ' ' . $car['model']); ?></h2><button class="booking-modal-close" onclick="closeBookingModal('step1')">&times;</button>
+            </div>
+            <div class="booking-modal-body">
+                <h3>Select Rental Dates</h3>
+                <div class="booking-form-group"><label>Pickup Date</label><input type="date" id="booking-pickup-date" class="booking-date-input"></div>
+                <div class="booking-form-group"><label>Return Date</label><input type="date" id="booking-return-date" class="booking-date-input"></div>
+                <div class="booking-summary-box">
+                    <div class="booking-summary-item"><span>Rental Duration:</span><span id="booking-duration-display">0 days</span></div>
+                    <div class="booking-summary-item"><span>Base Price:</span><span id="booking-base-price">$0.00</span></div>
                 </div>
-                <div class="booking-modal-body">
-                    <h3>Select Rental Dates</h3>
-
-                    <div class="booking-form-group">
-                        <label>Pickup Date</label>
-                        <input type="date" id="booking-pickup-date" class="booking-date-input">
-                    </div>
-
-                    <div class="booking-form-group">
-                        <label>Return Date</label>
-                        <input type="date" id="booking-return-date" class="booking-date-input">
-                    </div>
-
-                    <div class="booking-summary-box">
-                        <div class="booking-summary-item">
-                            <span>Rental Duration:</span>
-                            <span id="booking-duration-display">0 days</span>
-                        </div>
-                        <div class="booking-summary-item">
-                            <span>Base Price:</span>
-                            <span id="booking-base-price">$0.00</span>
-                        </div>
-                    </div>
-
-                    <button class="booking-btn-primary" onclick="proceedToExtras()">
-                        Continue to Extras
-                    </button>
-                </div>
+                <button class="booking-btn-primary" onclick="proceedToExtras()">Continue to Extras</button>
             </div>
         </div>
-
-        <!-- Step 2: Extras Modal -->
-        <div id="booking-modal-step2" class="booking-modal">
-            <div class="booking-modal-content">
-                <div class="booking-modal-header">
-                    <h2 id="modal-car-title-step2">Book Car</h2>
-                    <button class="booking-modal-close" onclick="closeBookingModal('step2')">&times;</button>
-                </div>
-                <div class="booking-modal-body">
-                    <h3>Add Extras (Optional)</h3>
-
-                    <div class="booking-extras-list">
-                        <div class="booking-extra-item" onclick="toggleExtra('gps')">
-                            <div class="booking-extra-info">
-                                <input type="checkbox" id="booking-gps" class="booking-extra-checkbox" data-price="10">
-                                <label for="booking-gps">GPS Navigation</label>
-                                <span class="booking-extra-price">$10 per day</span>
-                            </div>
-                            <div class="booking-extra-total" id="booking-gps-total">$0.00</div>
-                        </div>
-
-                        <div class="booking-extra-item" onclick="toggleExtra('insurance')">
-                            <div class="booking-extra-info">
-                                <input type="checkbox" id="booking-insurance" class="booking-extra-checkbox" data-price="15">
-                                <label for="booking-insurance">Full Insurance</label>
-                                <span class="booking-extra-price">$15 per day</span>
-                            </div>
-                            <div class="booking-extra-total" id="booking-insurance-total">$0.00</div>
-                        </div>
-
-                        <div class="booking-extra-item" onclick="toggleExtra('child-seat')">
-                            <div class="booking-extra-info">
-                                <input type="checkbox" id="booking-child-seat" class="booking-extra-checkbox" data-price="7">
-                                <label for="booking-child-seat">Child Seat</label>
-                                <span class="booking-extra-price">$7 per day</span>
-                            </div>
-                            <div class="booking-extra-total" id="booking-child-seat-total">$0.00</div>
-                        </div>
+    </div>
+    <div id="booking-modal-step2" class="booking-modal">
+        <div class="booking-modal-content">
+            <div class="booking-modal-header">
+                <h2>Book <?php echo htmlspecialchars($car['brand'] . ' ' . $car['model']); ?></h2><button class="booking-modal-close" onclick="closeBookingModal('step2')">&times;</button>
+            </div>
+            <div class="booking-modal-body">
+                <h3>Add Extras (Optional)</h3>
+                <div class="booking-extras-list">
+                    <div class="booking-extra-item" onclick="toggleExtra('gps')">
+                        <div class="booking-extra-info"><input type="checkbox" id="booking-gps" class="booking-extra-checkbox" data-price="10"><label for="booking-gps">GPS Navigation</label><span class="booking-extra-price">$10/day</span></div>
+                        <div class="booking-extra-total" id="booking-gps-total">$0.00</div>
                     </div>
-
-                    <div class="booking-price-summary">
-                        <div class="booking-summary-item">
-                            <span>Base Price (<span id="booking-days-count">0</span> days):</span>
-                            <span id="booking-base-price-step2">$0.00</span>
-                        </div>
-                        <div class="booking-summary-item">
-                            <span>Extras Total:</span>
-                            <span id="booking-extras-total">$0.00</span>
-                        </div>
-                        <div class="booking-summary-item total">
-                            <span>Subtotal:</span>
-                            <span id="booking-subtotal">$0.00</span>
-                        </div>
+                    <div class="booking-extra-item" onclick="toggleExtra('insurance')">
+                        <div class="booking-extra-info"><input type="checkbox" id="booking-insurance" class="booking-extra-checkbox" data-price="15"><label for="booking-insurance">Full Insurance</label><span class="booking-extra-price">$15/day</span></div>
+                        <div class="booking-extra-total" id="booking-insurance-total">$0.00</div>
                     </div>
-
-                    <div class="booking-modal-actions">
-                        <button class="booking-btn-secondary" onclick="backToDates()">
-                            Back
-                        </button>
-                        <button class="booking-btn-primary" onclick="proceedToPayment()">
-                            Continue to Payment
-                        </button>
+                    <div class="booking-extra-item" onclick="toggleExtra('child-seat')">
+                        <div class="booking-extra-info"><input type="checkbox" id="booking-child-seat" class="booking-extra-checkbox" data-price="7"><label for="booking-child-seat">Child Seat</label><span class="booking-extra-price">$7/day</span></div>
+                        <div class="booking-extra-total" id="booking-child-seat-total">$0.00</div>
                     </div>
                 </div>
+                <div class="booking-price-summary">
+                    <div class="booking-summary-item"><span>Base Price (<span id="booking-days-count">0</span> days):</span><span id="booking-base-price-step2">$0.00</span></div>
+                    <div class="booking-summary-item"><span>Extras Total:</span><span id="booking-extras-total">$0.00</span></div>
+                    <div class="booking-summary-item total"><span>Subtotal:</span><span id="booking-subtotal">$0.00</span></div>
+                </div>
+                <div class="booking-modal-actions"><button class="booking-btn-secondary" onclick="backToDates()">Back</button><button class="booking-btn-primary" onclick="proceedToPayment()">Continue to Payment</button></div>
             </div>
         </div>
-
-        <!-- Step 3: Payment Modal -->
-        <div id="booking-modal-step3" class="booking-modal">
-            <div class="booking-modal-content">
-                <div class="booking-modal-header">
-                    <h2 id="modal-car-title-step3">Book Car</h2>
-                    <button class="booking-modal-close" onclick="closeBookingModal('step3')">&times;</button>
-                </div>
-                <div class="booking-modal-body">
-                    <h3>Payment Details</h3>
-
-                    <div class="booking-payment-section">
-                        <h4>Payment Method</h4>
-                        <div class="booking-payment-methods">
-                            <label class="booking-payment-option" onclick="selectPayment('credit')">
-                                <input type="radio" name="booking-payment" value="credit" checked>
-                                <span>Credit Card</span>
-                            </label>
-                            <label class="booking-payment-option" onclick="selectPayment('debit')">
-                                <input type="radio" name="booking-payment" value="debit">
-                                <span>Debit Card</span>
-                            </label>
-                        </div>
-                    </div>
-
-                    <div class="booking-booking-summary">
-                        <h4>Booking Summary</h4>
-                        <div class="booking-summary-item">
-                            <span>Vehicle:</span>
-                            <span id="booking-vehicle-summary">Toyota Corolla</span>
-                        </div>
-                        <div class="booking-summary-item">
-                            <span>Rental Period:</span>
-                            <span id="booking-rental-period-summary">-</span>
-                        </div>
-                        <div class="booking-summary-item">
-                            <span>Duration:</span>
-                            <span id="booking-duration-summary">0 days</span>
-                        </div>
-                        <div class="booking-summary-item">
-                            <span>Base Price:</span>
-                            <span id="booking-base-price-summary">$0.00</span>
-                        </div>
-                        <div class="booking-summary-item">
-                            <span>Extras:</span>
-                            <span id="booking-extras-summary">$0.00</span>
-                        </div>
-                        <div class="booking-summary-item total">
-                            <span>Total Amount:</span>
-                            <span id="booking-total-amount">$0.00</span>
-                        </div>
-                    </div>
-
-                    <div class="booking-modal-actions">
-                        <button class="booking-btn-secondary" onclick="backToExtras()">
-                            Back
-                        </button>
-                        <button class="booking-btn-primary" onclick="confirmBooking()">
-                            Confirm Booking
-                        </button>
+    </div>
+    <div id="booking-modal-step3" class="booking-modal">
+        <div class="booking-modal-content">
+            <div class="booking-modal-header">
+                <h2>Book <?php echo htmlspecialchars($car['brand'] . ' ' . $car['model']); ?></h2><button class="booking-modal-close" onclick="closeBookingModal('step3')">&times;</button>
+            </div>
+            <div class="booking-modal-body">
+                <h3>Payment Details</h3>
+                <div class="booking-payment-section">
+                    <h4>Payment Method</h4>
+                    <div class="booking-payment-methods">
+                        <label class="booking-payment-option"><input type="radio" name="booking-payment" value="credit_card" checked><span>Credit Card</span></label>
+                        <label class="booking-payment-option"><input type="radio" name="booking-payment" value="debit_card"><span>Debit Card</span></label>
                     </div>
                 </div>
+                <div class="booking-booking-summary">
+                    <h4>Booking Summary</h4>
+                    <div class="booking-summary-item"><span>Vehicle:</span><span id="booking-vehicle-summary"><?php echo htmlspecialchars($car['brand'] . ' ' . $car['model']); ?></span></div>
+                    <div class="booking-summary-item"><span>Rental Period:</span><span id="booking-rental-period-summary">-</span></div>
+                    <div class="booking-summary-item"><span>Duration:</span><span id="booking-duration-summary">0 days</span></div>
+                    <div class="booking-summary-item"><span>Base Price:</span><span id="booking-base-price-summary">$0.00</span></div>
+                    <div class="booking-summary-item"><span>Extras:</span><span id="booking-extras-summary">$0.00</span></div>
+                    <div class="booking-summary-item total"><span>Total Amount:</span><span id="booking-total-amount">$0.00</span></div>
+                </div>
+                <div class="booking-modal-actions"><button class="booking-btn-secondary" onclick="backToExtras()">Back</button><button class="booking-btn-primary" onclick="confirmBooking()">Confirm Booking</button></div>
             </div>
         </div>
-
-        <!-- Step 4: Confirmation Modal -->
-        <div id="booking-modal-step4" class="booking-modal">
-            <div class="booking-modal-content booking-confirmation">
-                <div class="booking-modal-body">
-                    <div class="booking-confirmation-icon">
-                        ✓
-                    </div>
-                    <h2>Booking Confirmed!</h2>
-                    <p>Your car has been successfully booked.</p>
-                    <p>Your booking confirmation email has been sent.</p>
-
-                    <div class="booking-confirmation-details">
-                        <div class="booking-detail-item">
-                            <span>Vehicle:</span>
-                            <span id="confirmed-vehicle">Toyota Corolla 1.8</span>
-                        </div>
-                        <div class="booking-detail-item">
-                            <span>Duration:</span>
-                            <span id="confirmed-duration">1 day</span>
-                        </div>
-                        <div class="booking-detail-item">
-                            <span>Total:</span>
-                            <span id="confirmed-total">$0.00</span>
-                        </div>
-                    </div>
-
-                    <button class="booking-btn-primary" onclick="closeAllBookingModals()">
-                        Done
-                    </button>
+    </div>
+    <div id="booking-modal-step4" class="booking-modal">
+        <div class="booking-modal-content booking-confirmation">
+            <div class="booking-modal-body">
+                <div class="booking-confirmation-icon">✓</div>
+                <h2>Booking Confirmed!</h2>
+                <p>Your car has been successfully booked.</p>
+                <div class="booking-confirmation-details">
+                    <div class="booking-detail-item"><span>Vehicle:</span><span id="confirmed-vehicle"><?php echo htmlspecialchars($car['brand'] . ' ' . $car['model']); ?></span></div>
+                    <div class="booking-detail-item"><span>Duration:</span><span id="confirmed-duration">1 day</span></div>
+                    <div class="booking-detail-item"><span>Total:</span><span id="confirmed-total">$0.00</span></div>
                 </div>
+                <button class="booking-btn-primary" onclick="window.location.href='index.php?page=rental_history'">View My Rentals</button>
             </div>
         </div>
+    </div>
+    <form id="booking-form" method="POST" action="index.php?page=car-details&id=<?php echo $car['car_id']; ?>" style="display:none;">
+        <input type="hidden" name="action" value="book">
+        <input type="hidden" name="car_id" value="<?php echo $car['car_id']; ?>">
+        <input type="hidden" name="start_date" id="form-start-date">
+        <input type="hidden" name="end_date" id="form-end-date">
+        <input type="hidden" name="total_price" id="form-total-price">
+        <input type="hidden" name="extras" id="form-extras">
+        <input type="hidden" name="payment_method" id="form-payment-method">
+    </form>
+    <script>
+        const bookingData = {
+            vehicle: "<?php echo htmlspecialchars($car['brand'] . ' ' . $car['model'], ENT_QUOTES); ?>",
+            basePricePerDay: <?php echo $car['daily_price']; ?>,
+            carId: <?php echo $car['car_id']; ?>,
+            pickupDate: null,
+            returnDate: null,
+            duration: 0,
+            extras: {},
+            paymentMethod: 'credit_card',
+            total: 0
+        };
 
-        <!-- JavaScript for Booking Modal -->
-        <script>
-            // Booking Data Object
-            const bookingData = {
-                vehicle: "",
-                basePricePerDay: 0,
-                pickupDate: null,
-                returnDate: null,
-                duration: 0,
-                extras: {
-                    gps: false,
-                    insurance: false,
-                    childSeat: false
-                },
-                paymentMethod: 'credit',
-                total: 0
-            };
+        function openBookingModal(price, name, carId) {
+            initializeBookingDates();
+            document.getElementById('booking-modal-step1').style.display = 'block';
+        }
 
-            function openBookingModal(pricePerDay, vehicleName) {
-                // Set booking data from car details
-                bookingData.basePricePerDay = pricePerDay;
-                bookingData.vehicle = vehicleName;
+        function closeBookingModal(step) {
+            document.getElementById('booking-modal-' + step).style.display = 'none';
+        }
 
-                // Update modal titles
-                document.getElementById('modal-car-title').textContent = 'Book ' + vehicleName;
-                document.getElementById('modal-car-title-step2').textContent = 'Book ' + vehicleName;
-                document.getElementById('modal-car-title-step3').textContent = 'Book ' + vehicleName;
-                document.getElementById('booking-vehicle-summary').textContent = vehicleName;
-                document.getElementById('confirmed-vehicle').textContent = vehicleName;
+        function closeAllBookingModals() {
+            document.querySelectorAll('.booking-modal').forEach(m => m.style.display = 'none');
+        }
 
-                // Initialize dates
-                initializeBookingDates();
-                closeAllBookingModals();
-                document.getElementById('booking-modal-step1').style.display = 'block';
+        function initializeBookingDates() {
+            const today = new Date(),
+                tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            document.getElementById('booking-pickup-date').value = today.toISOString().split('T')[0];
+            document.getElementById('booking-return-date').value = tomorrow.toISOString().split('T')[0];
+            calculateBookingDuration();
+        }
+
+        function calculateBookingDuration() {
+            const pickup = new Date(document.getElementById('booking-pickup-date').value),
+                ret = new Date(document.getElementById('booking-return-date').value);
+            bookingData.duration = Math.max(1, Math.ceil((ret - pickup) / (1000 * 60 * 60 * 24)));
+            bookingData.pickupDate = document.getElementById('booking-pickup-date').value;
+            bookingData.returnDate = document.getElementById('booking-return-date').value;
+            updateStep1Display();
+        }
+
+        function updateStep1Display() {
+            const base = bookingData.duration * bookingData.basePricePerDay;
+            document.getElementById('booking-duration-display').textContent = bookingData.duration + ' day' + (bookingData.duration !== 1 ? 's' : '');
+            document.getElementById('booking-base-price').textContent = '$' + base.toFixed(2);
+        }
+
+        function proceedToExtras() {
+            if (bookingData.duration < 1) {
+                alert('Please select valid dates');
+                return;
             }
+            closeBookingModal('step1');
+            document.getElementById('booking-modal-step2').style.display = 'block';
+            updateExtrasDisplay();
+        }
 
-            function closeBookingModal(step) {
-                // Accept either numeric step (1,2,3,4) or strings like "step1" or full id
-                if (typeof step === 'number') {
-                    step = String(step);
-                }
-                let id = '';
-                if (typeof step === 'string') {
-                    if (step.startsWith('booking-modal-')) {
-                        id = step;
-                    } else if (step.startsWith('step')) {
-                        id = 'booking-modal-' + step; // e.g. 'step1' -> 'booking-modal-step1'
-                    } else if (/^\d+$/.test(step)) {
-                        id = 'booking-modal-step' + step; // e.g. '1' -> 'booking-modal-step1'
-                    } else {
-                        // fallback: try common forms
-                        id = 'booking-modal-step' + step;
-                    }
-                } else {
-                    id = 'booking-modal-step' + step;
-                }
-                const el = document.getElementById(id);
-                if (el) {
-                    el.style.display = 'none';
-                }
-            }
+        function backToDates() {
+            closeBookingModal('step2');
+            document.getElementById('booking-modal-step1').style.display = 'block';
+        }
 
-            function closeAllBookingModals() {
-                const modals = document.querySelectorAll('.booking-modal');
-                modals.forEach(modal => {
-                    modal.style.display = 'none';
-                });
-            }
-
-            function initializeBookingDates() {
-                const today = new Date();
-                const tomorrow = new Date(today);
-                tomorrow.setDate(tomorrow.getDate() + 1);
-
-                // Format dates for input fields (YYYY-MM-DD)
-                const todayStr = today.toISOString().split('T')[0];
-                const tomorrowStr = tomorrow.toISOString().split('T')[0];
-
-                document.getElementById('booking-pickup-date').value = todayStr;
-                document.getElementById('booking-return-date').value = tomorrowStr;
-
-                calculateBookingDuration();
-            }
-
-            function calculateBookingDuration() {
-                const pickupInput = document.getElementById('booking-pickup-date');
-                const returnInput = document.getElementById('booking-return-date');
-
-                if (!pickupInput || !returnInput) return;
-
-                const pickup = new Date(pickupInput.value);
-                const returnDate = new Date(returnInput.value);
-
-                const diffTime = Math.abs(returnDate - pickup);
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
-
-                bookingData.duration = diffDays;
-                bookingData.pickupDate = pickupInput.value;
-                bookingData.returnDate = returnInput.value;
-
-                updateStep1Display();
-            }
-
-            function updateStep1Display() {
-                const basePrice = bookingData.duration * bookingData.basePricePerDay;
-
-                document.getElementById('booking-duration-display').textContent =
-                    `${bookingData.duration} day${bookingData.duration !== 1 ? 's' : ''}`;
-                document.getElementById('booking-base-price').textContent =
-                    `$${basePrice.toFixed(2)}`;
-            }
-
-            function proceedToExtras() {
-                if (bookingData.duration < 1) {
-                    alert('Please select valid rental dates');
-                    return;
-                }
-
-                closeBookingModal('step1');
-                document.getElementById('booking-modal-step2').style.display = 'block';
-                updateExtrasDisplay();
-            }
-
-            function backToDates() {
-                closeBookingModal('step2');
-                document.getElementById('booking-modal-step1').style.display = 'block';
-            }
-
-            function toggleExtra(extraId) {
-                const checkbox = document.getElementById('booking-' + extraId);
-                if (checkbox) {
-                    checkbox.checked = !checkbox.checked;
-                    updateExtraTotal(extraId);
-                    calculateExtrasTotal();
-                }
-            }
-
-            function updateExtraTotal(extraId) {
-                const checkbox = document.getElementById('booking-' + extraId);
-                const price = parseFloat(checkbox.dataset.price);
-                const total = checkbox.checked ? price * bookingData.duration : 0;
-                const elementId = 'booking-' + extraId + '-total';
-
-                const element = document.getElementById(elementId);
-                if (element) {
-                    element.textContent = `$${total.toFixed(2)}`;
-                }
-            }
-
-            function updateExtrasDisplay() {
-                const daysCount = bookingData.duration;
-
-                document.getElementById('booking-days-count').textContent = daysCount;
-                document.getElementById('booking-base-price-step2').textContent =
-                    `$${(daysCount * bookingData.basePricePerDay).toFixed(2)}`;
-
-                // Update all extras
-                ['gps', 'insurance', 'child-seat'].forEach(extra => {
-                    updateExtraTotal(extra);
-                });
-
+        function toggleExtra(id) {
+            const cb = document.getElementById('booking-' + id);
+            if (cb) {
+                cb.checked = !cb.checked;
+                updateExtraTotal(id);
                 calculateExtrasTotal();
             }
+        }
 
-            function calculateExtrasTotal() {
-                let extrasTotal = 0;
-                const checkboxes = document.querySelectorAll('.booking-extra-checkbox:checked');
+        function updateExtraTotal(id) {
+            const cb = document.getElementById('booking-' + id),
+                price = parseFloat(cb.dataset.price),
+                total = cb.checked ? price * bookingData.duration : 0;
+            document.getElementById('booking-' + id + '-total').textContent = '$' + total.toFixed(2);
+        }
 
-                checkboxes.forEach(checkbox => {
-                    const price = parseFloat(checkbox.dataset.price);
-                    extrasTotal += price * bookingData.duration;
-                });
+        function updateExtrasDisplay() {
+            document.getElementById('booking-days-count').textContent = bookingData.duration;
+            document.getElementById('booking-base-price-step2').textContent = '$' + (bookingData.duration * bookingData.basePricePerDay).toFixed(2);
+            ['gps', 'insurance', 'child-seat'].forEach(e => updateExtraTotal(e));
+            calculateExtrasTotal();
+        }
 
-                document.getElementById('booking-extras-total').textContent =
-                    `$${extrasTotal.toFixed(2)}`;
+        function calculateExtrasTotal() {
+            let extrasTotal = 0;
+            document.querySelectorAll('.booking-extra-checkbox:checked').forEach(cb => extrasTotal += parseFloat(cb.dataset.price) * bookingData.duration);
+            document.getElementById('booking-extras-total').textContent = '$' + extrasTotal.toFixed(2);
+            document.getElementById('booking-subtotal').textContent = '$' + (bookingData.duration * bookingData.basePricePerDay + extrasTotal).toFixed(2);
+        }
 
-                const basePrice = bookingData.duration * bookingData.basePricePerDay;
-                const subtotal = basePrice + extrasTotal;
+        function proceedToPayment() {
+            calculateBookingTotal();
+            closeBookingModal('step2');
+            document.getElementById('booking-modal-step3').style.display = 'block';
+            updatePaymentSummary();
+        }
 
-                document.getElementById('booking-subtotal').textContent = `$${subtotal.toFixed(2)}`;
-            }
+        function backToExtras() {
+            closeBookingModal('step3');
+            document.getElementById('booking-modal-step2').style.display = 'block';
+        }
 
-            function proceedToPayment() {
-                calculateBookingTotal();
-                closeBookingModal('step2');
-                document.getElementById('booking-modal-step3').style.display = 'block';
-                updatePaymentSummary();
-            }
-
-            function backToExtras() {
-                closeBookingModal('step3');
-                document.getElementById('booking-modal-step2').style.display = 'block';
-            }
-
-            function selectPayment(method) {
-                bookingData.paymentMethod = method;
-            }
-
-            function calculateBookingTotal() {
-                let extrasTotal = 0;
-                const checkboxes = document.querySelectorAll('.booking-extra-checkbox:checked');
-
-                checkboxes.forEach(checkbox => {
-                    const price = parseFloat(checkbox.dataset.price);
-                    extrasTotal += price * bookingData.duration;
-
-                    // Update booking data
-                    const extraId = checkbox.id.replace('booking-', '');
-                    bookingData.extras[extraId] = true;
-                });
-
-                const basePrice = bookingData.duration * bookingData.basePricePerDay;
-                bookingData.total = basePrice + extrasTotal;
-            }
-
-            function updatePaymentSummary() {
-                document.getElementById('booking-rental-period-summary').textContent =
-                    `${bookingData.pickupDate} to ${bookingData.returnDate}`;
-                document.getElementById('booking-duration-summary').textContent =
-                    `${bookingData.duration} day${bookingData.duration !== 1 ? 's' : ''}`;
-
-                const basePrice = bookingData.duration * bookingData.basePricePerDay;
-                document.getElementById('booking-base-price-summary').textContent =
-                    `$${basePrice.toFixed(2)}`;
-
-                // Calculate extras for summary
-                let extrasTotal = 0;
-                const checkboxes = document.querySelectorAll('.booking-extra-checkbox:checked');
-
-                checkboxes.forEach(checkbox => {
-                    const price = parseFloat(checkbox.dataset.price);
-                    extrasTotal += price * bookingData.duration;
-                });
-
-                document.getElementById('booking-extras-summary').textContent =
-                    extrasTotal > 0 ? `$${extrasTotal.toFixed(2)}` : 'None';
-
-                document.getElementById('booking-total-amount').textContent =
-                    `$${bookingData.total.toFixed(2)}`;
-            }
-
-            function confirmBooking() {
-                // Here you would normally send data to server
-                // For now, just show confirmation
-                closeBookingModal('step3');
-                document.getElementById('booking-modal-step4').style.display = 'block';
-
-                // Update confirmation details
-                document.getElementById('confirmed-duration').textContent =
-                    `${bookingData.duration} day${bookingData.duration !== 1 ? 's' : ''}`;
-                document.getElementById('confirmed-total').textContent =
-                    `$${bookingData.total.toFixed(2)}`;
-            }
-
-            // Event Listeners when DOM is loaded
-            document.addEventListener('DOMContentLoaded', function() {
-                // Date change listeners
-                const pickupDateInput = document.getElementById('booking-pickup-date');
-                const returnDateInput = document.getElementById('booking-return-date');
-
-                if (pickupDateInput && returnDateInput) {
-                    pickupDateInput.addEventListener('change', calculateBookingDuration);
-                    returnDateInput.addEventListener('change', calculateBookingDuration);
-                }
-
-                // Extras checkbox listeners
-                const extraCheckboxes = document.querySelectorAll('.booking-extra-checkbox');
-                extraCheckboxes.forEach(checkbox => {
-                    checkbox.addEventListener('change', function() {
-                        const extraId = this.id.replace('booking-', '');
-                        updateExtraTotal(extraId);
-                        calculateExtrasTotal();
-                    });
-                });
-
-                // Close modal when clicking outside
-                window.addEventListener('click', function(event) {
-                    if (event.target.classList.contains('booking-modal')) {
-                        event.target.style.display = 'none';
-                    }
-                });
-
-                // Initialize dates if modal exists
-                if (pickupDateInput) {
-                    initializeBookingDates();
-                }
+        function calculateBookingTotal() {
+            let extrasTotal = 0,
+                extrasList = [];
+            document.querySelectorAll('.booking-extra-checkbox:checked').forEach(cb => {
+                extrasTotal += parseFloat(cb.dataset.price) * bookingData.duration;
+                extrasList.push(cb.id.replace('booking-', ''));
             });
-        </script>
-    <?php
+            bookingData.total = bookingData.duration * bookingData.basePricePerDay + extrasTotal;
+            bookingData.extras = extrasList;
+        }
+
+        function updatePaymentSummary() {
+            document.getElementById('booking-rental-period-summary').textContent = bookingData.pickupDate + ' to ' + bookingData.returnDate;
+            document.getElementById('booking-duration-summary').textContent = bookingData.duration + ' day' + (bookingData.duration !== 1 ? 's' : '');
+            document.getElementById('booking-base-price-summary').textContent = '$' + (bookingData.duration * bookingData.basePricePerDay).toFixed(2);
+            let extrasTotal = 0;
+            document.querySelectorAll('.booking-extra-checkbox:checked').forEach(cb => extrasTotal += parseFloat(cb.dataset.price) * bookingData.duration);
+            document.getElementById('booking-extras-summary').textContent = extrasTotal > 0 ? '$' + extrasTotal.toFixed(2) : 'None';
+            document.getElementById('booking-total-amount').textContent = '$' + bookingData.total.toFixed(2);
+        }
+
+        function confirmBooking() {
+            const method = document.querySelector('input[name="booking-payment"]:checked').value;
+            document.getElementById('form-start-date').value = bookingData.pickupDate;
+            document.getElementById('form-end-date').value = bookingData.returnDate;
+            document.getElementById('form-total-price').value = bookingData.total;
+            document.getElementById('form-extras').value = bookingData.extras.join(',');
+            document.getElementById('form-payment-method').value = method;
+            document.getElementById('booking-form').submit();
+        }
+        document.addEventListener('DOMContentLoaded', function() {
+            const p = document.getElementById('booking-pickup-date'),
+                r = document.getElementById('booking-return-date');
+            if (p && r) {
+                p.addEventListener('change', calculateBookingDuration);
+                r.addEventListener('change', calculateBookingDuration);
+            }
+            window.addEventListener('click', e => {
+                if (e.target.classList.contains('booking-modal')) e.target.style.display = 'none';
+            });
+        });
+    </script>
+<?php
     }
+
+    // ============================================
+    // AUTH PAGE
+    // ============================================
     function renderAuth()
     {
-    ?>
-        <div class="logcontainer">
-            <div class="auth-page">
-                <div class="auth-container container" style="max-width: 1200px;
-	     display: flex; align-items: flex-start;">
-                    <!-- Decorative Elements -->
-                    <div class="decorative-glow-1"></div>
-                    <div class="decorative-glow-2"></div>
-
-                    <!-- Left Side - Branding -->
-                    <div class="brand-side">
-                        <div class="logo">LUXDRIVE</div>
-                        <p class="brand-tagline">Your Gateway to Luxury</p>
-                        <p class="brand-description">Experience the finest collection of premium vehicles from world-renowned brands</p>
-
-                        <div class="brand-features">
-                            <div class="feature-item">
-                                <div class="feature-icon">
-                                    <svg class="icon" viewBox="0 0 24 24" style="stroke: white;">
-                                        <path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                                    </svg>
-                                </div>
-                                <div class="feature-text">
-                                    <h4>Premium Fleet</h4>
-                                    <p>350+ luxury vehicles worldwide</p>
-                                </div>
+        global $authError;
+?>
+    <div class="logcontainer">
+        <div class="auth-page">
+            <div class="auth-container container" style="max-width: 1200px; display: flex; align-items: flex-start;">
+                <div class="decorative-glow-1"></div>
+                <div class="decorative-glow-2"></div>
+                <div class="brand-side">
+                    <div class="logo">LUXDRIVE</div>
+                    <p class="brand-tagline">Your Gateway to Luxury</p>
+                    <p class="brand-description">Experience the finest collection of premium vehicles from world-renowned brands</p>
+                    <div class="brand-features">
+                        <div class="feature-item">
+                            <div class="feature-icon"><svg class="icon" viewBox="0 0 24 24" style="stroke: white;">
+                                    <path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                                </svg></div>
+                            <div class="feature-text">
+                                <h4>Premium Fleet</h4>
+                                <p>350+ luxury vehicles worldwide</p>
                             </div>
-
-                            <div class="feature-item">
-                                <div class="feature-icon">
-                                    <svg class="icon" viewBox="0 0 24 24" style="stroke: white;">
-                                        <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                                    </svg>
-                                </div>
-                                <div class="feature-text">
-                                    <h4>Secure Booking</h4>
-                                    <p>Safe and encrypted transactions</p>
-                                </div>
+                        </div>
+                        <div class="feature-item">
+                            <div class="feature-icon"><svg class="icon" viewBox="0 0 24 24" style="stroke: white;">
+                                    <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                </svg></div>
+                            <div class="feature-text">
+                                <h4>Secure Booking</h4>
+                                <p>Safe and encrypted transactions</p>
                             </div>
-
-                            <div class="feature-item">
-                                <div class="feature-icon">
-                                    <svg class="icon" viewBox="0 0 24 24" style="stroke: white;">
-                                        <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                </div>
-                                <div class="feature-text">
-                                    <h4>24/7 Support</h4>
-                                    <p>Dedicated concierge service</p>
-                                </div>
+                        </div>
+                        <div class="feature-item">
+                            <div class="feature-icon"><svg class="icon" viewBox="0 0 24 24" style="stroke: white;">
+                                    <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg></div>
+                            <div class="feature-text">
+                                <h4>24/7 Support</h4>
+                                <p>Dedicated concierge service</p>
                             </div>
                         </div>
                     </div>
-
-                    <!-- Right Side - Auth Forms -->
-                    <div class="form-side" style="
-	  flex: 2;">
-                        <div class="auth-containerF" style="width: 100%;">
-                            <!-- Tabs -->
-                            <div class="auth-tabs">
-                                <button class="tab-btn active" onclick="switchTab('login')">Login</button>
-                                <button class="tab-btn" onclick="switchTab('signup')">Sign Up</button>
+                </div>
+                <div class="form-side" style="flex: 2;">
+                    <div class="auth-containerF" style="width: 100%;">
+                        <div class="auth-tabs"><button class="tab-btn active" onclick="switchTab('login')">Login</button><button class="tab-btn" onclick="switchTab('signup')">Sign Up</button></div>
+                        <?php if ($authError && isset($authError['error'])): ?>
+                            <div style="background: #fee2e2; color: #dc2626; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;"><?php echo htmlspecialchars($authError['error']); ?></div>
+                        <?php endif; ?>
+                        <div id="login-form" class="form-content active">
+                            <div class="form-card">
+                                <h2>Welcome back</h2>
+                                <p class="subtitle">Enter your credentials to access your account</p>
+                                <form method="POST" action="index.php?page=auth">
+                                    <input type="hidden" name="action" value="login">
+                                    <div class="form-group"><label>Email Address</label><input type="email" name="email" placeholder="john.doe@example.com" required></div>
+                                    <div class="form-group"><label>Password</label><input type="password" name="password" placeholder="Enter your password" required></div>
+                                    <button type="submit" class="submit-btn">Login</button>
+                                </form>
                             </div>
-
-                            <!-- Login Form -->
-                            <div id="login-form" class="form-content active">
-                                <div class="form-card">
-                                    <h2>Welcome back</h2>
-                                    <p class="subtitle">Enter your credentials to access your account</p>
-
-                                    <form>
-                                        <div class="form-group">
-                                            <label>Email Address</label>
-                                            <input type="email" placeholder="john.doe@example.com">
-                                        </div>
-
-                                        <div class="form-group">
-                                            <label>Password</label>
-                                            <input type="password" placeholder="Enter your password">
-                                        </div>
-
-                                        <div class="forgot-password">
-                                            <a href="#">Forgot password?</a>
-                                        </div>
-
-                                        <div class="checkbox-group">
-                                            <input type="checkbox" id="remember">
-                                            <label for="remember">Remember me for 30 days</label>
-                                        </div>
-
-                                        <button type="submit" class="submit-btn">Login</button>
-
-                                        <div class="divider">
-                                            <span>Or continue with</span>
-                                        </div>
-
-                                        <div class="social-buttons">
-                                            <button type="button" class="social-btn">
-                                                <svg class="icon icon-fill" viewBox="0 0 24 24">
-                                                    <path d="M12.24 10.285V14.4h6.806c-.275 1.765-2.056 5.174-6.806 5.174-4.095 0-7.439-3.389-7.439-7.574s3.345-7.574 7.439-7.574c2.33 0 3.891.989 4.785 1.849l3.254-3.138C18.189 1.186 15.479 0 12.24 0c-6.635 0-12 5.365-12 12s5.365 12 12 12c6.926 0 11.52-4.869 11.52-11.726 0-.788-.085-1.39-.189-1.989H12.24z" />
-                                                </svg>
-                                                Google
-                                            </button>
-                                            <button type="button" class="social-btn">
-                                                <svg class="icon icon-fill" viewBox="0 0 24 24">
-                                                    <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z" />
-                                                </svg>
-                                                Facebook
-                                            </button>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-
-                            <!-- Sign Up Form -->
-                            <div id="signup-form" class="form-content">
-                                <div class="form-card">
-                                    <h2>Create account</h2>
-                                    <p class="subtitle">Join LUXDRIVE and start your luxury journey</p>
-
-                                    <form class="signupform">
-                                        <div class="form-row">
-                                            <div class="form-group">
-                                                <label>First Name</label>
-                                                <input type="text" placeholder="John">
-                                            </div>
-                                            <div class="form-group">
-                                                <label>Last Name</label>
-                                                <input type="text" placeholder="Doe">
-                                            </div>
-                                        </div>
-
-                                        <div class="form-group">
-                                            <label>Email Address</label>
-                                            <input type="email" placeholder="john.doe@example.com">
-                                        </div>
-
-                                        <div class="form-group">
-                                            <label>Phone Number</label>
-                                            <input type="tel" placeholder="+1 (555) 000-0000">
-                                        </div>
-
-                                        <div class="form-group">
-                                            <label>Password</label>
-                                            <input type="password" placeholder="Create a strong password">
-                                        </div>
-
-                                        <div class="form-group">
-                                            <label>Confirm Password</label>
-                                            <input type="password" placeholder="Re-enter your password">
-                                        </div>
-
-                                        <div class="checkbox-group">
-                                            <input type="checkbox" id="terms">
-                                            <label for="terms">I agree to the Terms of Service and Privacy Policy</label>
-                                        </div>
-
-                                        <button type="submit" class="submit-btn">Create Account</button>
-
-                                        <div class="divider">
-                                            <span>Or sign up with</span>
-                                        </div>
-
-                                        <div class="social-buttons">
-                                            <button type="button" class="social-btn">
-                                                <svg class="icon icon-fill" viewBox="0 0 24 24">
-                                                    <path d="M12.24 10.285V14.4h6.806c-.275 1.765-2.056 5.174-6.806 5.174-4.095 0-7.439-3.389-7.439-7.574s3.345-7.574 7.439-7.574c2.33 0 3.891.989 4.785 1.849l3.254-3.138C18.189 1.186 15.479 0 12.24 0c-6.635 0-12 5.365-12 12s5.365 12 12 12c6.926 0 11.52-4.869 11.52-11.726 0-.788-.085-1.39-.189-1.989H12.24z" />
-                                                </svg>
-                                                Google
-                                            </button>
-                                            <button type="button" class="social-btn">
-                                                <svg class="icon icon-fill" viewBox="0 0 24 24">
-                                                    <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z" />
-                                                </svg>
-                                                Facebook
-                                            </button>
-                                        </div>
-
-                                        <div class="terms">
-                                            By signing up, you agree to our <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>
-                                        </div>
-                                    </form>
-                                </div>
+                        </div>
+                        <div id="signup-form" class="form-content">
+                            <div class="form-card">
+                                <h2>Create account</h2>
+                                <p class="subtitle">Join LUXDRIVE and start your luxury journey</p>
+                                <form method="POST" action="index.php?page=auth" class="signupform">
+                                    <input type="hidden" name="action" value="register">
+                                    <div class="form-row">
+                                        <div class="form-group"><label>First Name *</label><input type="text" name="first_name" placeholder="John" required></div>
+                                        <div class="form-group"><label>Last Name *</label><input type="text" name="last_name" placeholder="Doe" required></div>
+                                    </div>
+                                    <div class="form-group"><label>Email Address *</label><input type="email" name="email" placeholder="john.doe@example.com" required></div>
+                                    <div class="form-group"><label>Phone Number</label><input type="tel" name="phone" placeholder="+1 (555) 000-0000"></div>
+                                    <div class="form-group"><label>Driver License * (Required)</label><input type="text" name="driver_license" placeholder="DL12345678" required></div>
+                                    <div class="form-group"><label>Password *</label><input type="password" name="password" placeholder="Create a strong password" required></div>
+                                    <div class="form-group"><label>Confirm Password *</label><input type="password" name="confirm_password" placeholder="Re-enter your password" required></div>
+                                    <button type="submit" class="submit-btn">Create Account</button>
+                                </form>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-
-
-        <script>
-            function switchTab(tab) {
-                // Update tab buttons
-                const tabBtns = document.querySelectorAll('.tab-btn');
-                tabBtns.forEach(btn => btn.classList.remove('active'));
-                event.target.classList.add('active');
-
-                // Update form visibility
-                const loginForm = document.getElementById('login-form');
-                const signupForm = document.getElementById('signup-form');
-
-                if (tab === 'login') {
-                    loginForm.classList.add('active');
-                    signupForm.classList.remove('active');
-                } else {
-                    loginForm.classList.remove('active');
-                    signupForm.classList.add('active');
-                }
-            }
-        </script>
-
-    <?php
+    </div>
+    <script>
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById('login-form').classList.toggle('active', tab === 'login');
+            document.getElementById('signup-form').classList.toggle('active', tab !== 'login');
+        }
+    </script>
+<?php
     }
 
-    // Initialize database
-    // initializeDatabaseEmbedded();
-
-    // Determine which page to render
-    $page = 'home';
-    if (isset($_GET['page'])) {
-        $page = sanitize($_GET['page']);
+    // ============================================
+    // PROFILE PAGE
+    // ============================================
+    function renderProfile()
+    {
+        if (!isClient()) {
+            header('Location: index.php?page=auth');
+            exit;
+        }
+        global $profileResult;
+        $profile = getClientProfile($_SESSION['user_id']);
+?>
+    <div class="container" style="padding: 2rem 0;">
+        <h2 style="margin-bottom: 2rem;">My Profile</h2>
+        <?php if ($profileResult && isset($profileResult['success'])): ?>
+            <div style="background: #dcfce7; color: #16a34a; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;"><?php echo htmlspecialchars($profileResult['success']); ?></div>
+        <?php endif; ?>
+        <?php if ($profileResult && isset($profileResult['error'])): ?>
+            <div style="background: #fee2e2; color: #dc2626; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;"><?php echo htmlspecialchars($profileResult['error']); ?></div>
+        <?php endif; ?>
+        <div class="form-card" style="max-width: 600px;">
+            <form method="POST" action="index.php?page=profile">
+                <input type="hidden" name="action" value="update_profile">
+                <div class="form-row">
+                    <div class="form-group"><label>First Name</label><input type="text" name="first_name" value="<?php echo htmlspecialchars($profile['first_name']); ?>" required></div>
+                    <div class="form-group"><label>Last Name</label><input type="text" name="last_name" value="<?php echo htmlspecialchars($profile['last_name']); ?>" required></div>
+                </div>
+                <div class="form-group"><label>Email</label><input type="email" value="<?php echo htmlspecialchars($profile['email']); ?>" disabled></div>
+                <div class="form-group"><label>Phone</label><input type="tel" name="phone" value="<?php echo htmlspecialchars($profile['phone'] ?? ''); ?>"></div>
+                <div class="form-group"><label>Driver License</label><input type="text" value="<?php echo htmlspecialchars($profile['driver_license']); ?>" disabled></div>
+                <div class="form-group"><label>Address</label><input type="text" name="address" value="<?php echo htmlspecialchars($profile['address'] ?? ''); ?>"></div>
+                <button type="submit" class="submit-btn">Update Profile</button>
+            </form>
+        </div>
+    </div>
+<?php
     }
 
-    // Render the requested page
+    // ============================================
+    // RENTAL HISTORY PAGE
+    // ============================================
+    function renderRentalHistory()
+    {
+        if (!isClient()) {
+            header('Location: index.php?page=auth');
+            exit;
+        }
+        $rentals = getClientRentals($_SESSION['user_id']);
+?>
+    <div class="container" style="padding: 2rem 0;">
+        <h2 style="margin-bottom: 2rem;">My Rental History</h2>
+        <?php if (empty($rentals)): ?>
+            <div style="text-align: center; padding: 3rem;">
+                <h3>No rentals yet</h3>
+                <p>Start your luxury journey by booking a car!</p><a href="index.php?page=browse" class="btn btn-brws" style="margin-top: 1rem; display: inline-block;">Browse Cars</a>
+            </div>
+        <?php else: ?>
+            <div class="browse-grid">
+                <?php foreach ($rentals as $rental): ?>
+                    <div class="car-card">
+                        <div class="car-image-container"><img src="<?php echo htmlspecialchars($rental['image_url'] ?: 'https://images.unsplash.com/photo-1618843479313-40f8afb4b4d8?w=800&q=80'); ?>" alt="<?php echo htmlspecialchars($rental['brand']); ?>" class="car-image">
+                            <div class="status-badge"><span class="<?php echo $rental['status'] === 'ongoing' ? 'status-available' : ''; ?>" style="<?php echo $rental['status'] !== 'ongoing' ? 'color: #6b7280;' : ''; ?>">● <?php echo ucfirst($rental['status']); ?></span></div>
+                        </div>
+                        <div class="car-details">
+                            <div>
+                                <h3 class="car-title"><?php echo htmlspecialchars($rental['brand']); ?></h3>
+                                <p class="car-subtitle"><?php echo htmlspecialchars($rental['model']); ?></p>
+                            </div>
+                            <div class="car-specs">
+                                <div class="spec-item"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                    </svg><span><?php echo $rental['start_date']; ?></span></div>
+                                <div class="spec-item"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                    </svg><span><?php echo $rental['end_date']; ?></span></div>
+                            </div>
+                            <div class="car-footer">
+                                <div>
+                                    <div class="car-price">$<?php echo number_format($rental['total_price'], 2); ?></div>
+                                    <div class="price-label"><?php echo $rental['payment_status'] === 'paid' ? 'Paid' : 'Pending'; ?></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+    </div>
+<?php
+    }
+
+    // ============================================
+    // PAGE ROUTER
+    // ============================================
+    $page = sanitize($_GET['page'] ?? 'home');
+
     renderHeader();
 
     switch ($page) {
@@ -2016,48 +1684,21 @@ function renderHeader($title = 'LUXDRIVE')
         case 'browse':
             renderBrowseCars();
             break;
-        case 'about':
-            renderAboutPage();
+        case 'car-details':
+            renderCarDetails();
             break;
         case 'auth':
             renderAuth();
             break;
-        case 'car-details':
-            renderCarDetails();
+        case 'profile':
+            renderProfile();
             break;
-        case 'book':
-            renderBookPage();
-            break;
-        case 'dashboard':
-            renderDashboard();
-            break;
-        case 'manage_cars':
-            renderManageCars();
-            break;
-        case 'manage_rentals':
-            renderManageRentals();
-            break;
-        case 'manage_clients':
-            renderManageClients();
-            break;
-        case 'manage_staff':
-            renderManageStaff();
-            break;
-        case 'reports':
-            renderReports();
-            break;
-        case 'maintenance':
-            renderMaintenance();
-            break;
-        case 'logout':
-            renderLogout();
+        case 'rental_history':
+            renderRentalHistory();
             break;
         default:
             renderHomePage();
     }
 
     renderFooter();
-    ?>
-    </body>
-
-    </html>
+?>

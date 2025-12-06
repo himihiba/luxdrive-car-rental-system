@@ -875,7 +875,7 @@ button {
 /* car slide section */
 .fleet-section {
 	background: linear-gradient(to bottom right, #f9fafb, #fff, #f9fafb);
-
+	padding: 5rem 6rem 0 6rem;
 }
 
 /* Header */
@@ -1311,7 +1311,7 @@ button {
 /* Contact us section */
 .contact-section {
 	position: relative;
-	padding: 0 0 10rem 0;
+	padding: 0;
 	background: linear-gradient(to bottom right, #f9fafb, #ffffff, #fff7ed);
 	color: white;
 	overflow: hidden;
@@ -2224,7 +2224,7 @@ label span {
 	margin-bottom: 1rem;
 }
 
-.brand-description {
+.brand-side .brand-description {
 	color: var(--text-label);
 	text-align: center;
 	max-width: 500px;
@@ -2569,6 +2569,7 @@ label span {
 .browse-section {
 	background-color: var(--bg-w);
 	min-height: 100vh;
+	margin-top: 6rem;
 }
 
 .browse-header {
@@ -2643,7 +2644,9 @@ label span {
 .back-nav {
 	margin-bottom: 2rem;
 }
-
+.details-section{
+	padding: 5rem;
+}
 .back-link {
 	display: inline-flex;
 	align-items: center;
