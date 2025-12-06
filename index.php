@@ -1,46 +1,257 @@
 <?php
+// Database constants
+define('DB_HOST', 'localhost');
+define('DB_NAME', 'car_rental_agency');
+define('DB_USER', 'root');
+define('DB_PASS', '');
+define('BASE_URL', (
+    (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http'
+) . '://' . preg_replace('/[^A-Za-z0-9\.\-:_]/', '', $_SERVER['HTTP_HOST']) . rtrim(dirname($_SERVER['PHP_SELF']), '/\\') . '/');
+
+// Start Session
 session_start();
+
+// Database Connection
+function getDB()
+{
+    static $db = null;
+    if ($db === null) {
+        try {
+            $dsn = "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4";
+            $db = new PDO($dsn, DB_USER, DB_PASS);
+            $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            $db->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            die("Database connection failed: " . $e->getMessage());
+        }
+    }
+    return $db;
+}
+
+// Create Database and Tables if not exists
+function initializeDatabase()
+{
+    $db = getDB();
+
+    $sql = file_get_contents('database.sql');
+    if ($sql) {
+        $db->exec($sql);
+    }
+}
+
+
+// Security Functions
+function sanitize($data)
+{
+    return htmlspecialchars(strip_tags(trim($data)));
+}
+
+function hashPassword($password)
+{
+    return password_hash($password, PASSWORD_DEFAULT);
+}
+
+function verifyPassword($password, $hash)
+{
+    return password_verify($password, $hash);
+}
+
+// Check if user is logged in as staff
+function isStaffLoggedIn()
+{
+    return isset($_SESSION['staff_id']);
+}
+
+function isAdmin()
+{
+    return isset($_SESSION['role']) && $_SESSION['role'] === 'admin';
+}
+
+// HTML TEMPLATE FUNCTIONS
+
+function renderHeader($title = 'LUXDRIVE')
+{
 ?>
 
+    <!DOCTYPE html>
+    <html lang="en">
 
-<!DOCTYPE html>
-<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title><?php echo htmlspecialchars($title); ?></title>
+        <link rel="stylesheet" href="styleV01.css">
+    </head>
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LUXDRIVE</title>
-    <link rel="stylesheet" href="styles.css">
-</head>
-
-<body>
-    <!-- HEADER -->
-    <header class="header" id="header">
-        <div class="container flex-space">
-            <a href="index.php?page=home" class="nav__logo">LUXDRIVE</a>
-            <nav class="nav flex nav_ul nav_mobile">
-                <ul class="nav__list flex ">
-                    <li><a href="index.php?page=home" class="nav__links">Home</a></li>
-                    <li><a href="index.php?page=browse" class="nav__links">Browse cars</a></li>
-                    <li><a href="#contact" class="nav__links">Contact us</a></li>
-                </ul>
-                <?php if (isset($_SESSION['user_id'])) { ?>
-                    <div class="flex-center gap-1">
-                        <div class="profile flex-center"><span>AM</span></div>
-                        <button><img width="30" height="30" src="https://img.icons8.com/material-rounded/24/expand-arrow--v1.png" alt="expand-arrow--v1" /></button>
-                    </div>
-                <?php } else { ?>
-                    <ul class="flex auth-list" style="align-items: center;">
-                        <li><button class="auth_link btn log_btn" id="openAuth">login</button></li>
-                        <li><a href="index.php?page=signup" class="auth_link btn sign_btn">sign Up</a></li>
+    <body>
+        <!-- HEADER -->
+        <header class="header" id="header">
+            <div class="container flex-space">
+                <a href="index.php?page=home" class="nav__logo">LUXDRIVE</a>
+                <input type="checkbox" class="input__toggel" id="inputToggel">
+                <nav class="nav flex nav_ul nav__menu" style="align-items: center;">
+                    <ul class="nav__list flex ">
+                        <li><a href="index.php?page=home" class="nav__links">Home</a></li>
+                        <li><a href="index.php?page=browse" class="nav__links">Browse cars</a></li>
+                        <li><a href="index.php?page=home#contactus" class="nav__links">Contact us</a></li>
                     </ul>
-                <?php } ?>
-            </nav>
-        </div>
-    </header>
+                    <?php if (isset($_SESSION['user_id'])) { ?>
+                        <div class="flex-center gap-1 user-dropdown">
+                            <div class="profile flex-center"><span>AM</span></div>
 
-    <!--MAIN -->
-    <main class="main">
+                            <button class="dropdown-toggle">
+                                <img width="26" height="26" src="https://img.icons8.com/material-rounded/24/expand-arrow--v1.png" />
+                            </button>
+
+                            <div class="dropdown-menu">
+                                <a href="index.php?page=rental_history">Rental History</a>
+                                <a href="index.php?page=profile">Profile</a>
+                                <hr>
+                                <a href="index.php?page=logout" class="logout">Logout</a>
+                            </div>
+
+                        </div>
+                    <?php } else { ?>
+                        <ul class="flex auth-list">
+                            <li><a href="index.php?page=auth" class="auth_link btn log_btn">login</a></li>
+                            <li><a href="index.php?page=auth" class="auth_link btn sign_btn">sign Up</a></li>
+                        </ul>
+                    <?php } ?>
+
+                </nav>
+                <label for="inputToggel" class="nav__toggel">
+                    <span class="navig_menu"></span>
+                </label>
+            </div>
+        </header>
+
+        <!--MAIN -->
+        <main class="main">
+        <?php
+    }
+    function renderFooter()
+    {
+        ?>
+        </main>
+        <!-- FOOTER -->
+        <footer class="footer">
+            <!-- Decorative Elements -->
+            <div class="decorative-blur-1"></div>
+            <div class="decorative-blur-2"></div>
+            <div class="footer-content">
+
+                <!-- Main Footer Content -->
+                <div class="footer-main">
+                    <div class="footer-grid">
+                        <!-- Brand Column -->
+                        <div class="brand-column">
+                            <div class="brand-logo">LUXDRIVE</div>
+                            <p class="brand-description">
+                                Experience the world's finest luxury vehicles. Premium car rental at your fingertips.
+                            </p>
+                            <div class="social-links">
+                                <a href="#" class="social-link" aria-label="Facebook">
+                                    <svg fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"></path>
+                                    </svg>
+                                </a>
+                                <a href="#" class="social-link" aria-label="Twitter">
+                                    <svg fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M23 3a10.9 10.9 0 01-3.14 1.53 4.48 4.48 0 00-7.86 3v1A10.66 10.66 0 013 4s-4 9 5 13a11.64 11.64 0 01-7 2c9 5 20 0 20-11.5a4.5 4.5 0 00-.08-.83A7.72 7.72 0 0023 3z"></path>
+                                    </svg>
+                                </a>
+                                <a href="#" class="social-link" aria-label="Instagram">
+                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <rect x="2" y="2" width="20" height="20" rx="5" ry="5" stroke-width="2"></rect>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37zm1.5-4.87h.01"></path>
+                                    </svg>
+                                </a>
+                                <a href="#" class="social-link" aria-label="LinkedIn">
+                                    <svg fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6zM2 9h4v12H2z"></path>
+                                        <circle cx="4" cy="4" r="2"></circle>
+                                    </svg>
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- Company Column -->
+                        <div class="footer-column">
+                            <h4 class="footer-column-title">Company</h4>
+                            <ul class="footer-links">
+                                <li><a href="#">Features</a></li>
+                                <li><a href="#">Our Fleet</a></li>
+                                <li><a href="#">How It Works</a></li>
+                                <li><a href="#">About Us</a></li>
+                            </ul>
+                        </div>
+
+                        <!-- Support Column -->
+                        <div class="footer-column">
+                            <h4 class="footer-column-title">Support</h4>
+                            <ul class="footer-links">
+                                <li><a href="#">Help Center</a></li>
+                                <li><a href="#">Contact Us</a></li>
+                                <li><a href="#">FAQ</a></li>
+                                <li><a href="#">Live Chat</a></li>
+                            </ul>
+                        </div>
+
+                        <!-- Legal Column -->
+                        <div class="footer-column">
+                            <h4 class="footer-column-title">Legal</h4>
+                            <ul class="footer-links">
+                                <li><a href="#">Terms of Service</a></li>
+                                <li><a href="#">Privacy Policy</a></li>
+                                <li><a href="#">Cookie Policy</a></li>
+                                <li><a href="#">Licenses</a></li>
+                            </ul>
+                        </div>
+
+                        <!-- Contact Column -->
+                        <div class="footer-column">
+                            <h4 class="footer-column-title">Contact</h4>
+                            <div class="contact-item">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                </svg>
+                                <span>123 Luxury Ave, Monaco</span>
+                            </div>
+                            <div class="contact-item">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path>
+                                </svg>
+                                <span>+1 (555) 123-4567</span>
+                            </div>
+                            <div class="contact-item">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                                </svg>
+                                <a href="mailto:info@luxdrive.com">info@luxdrive.com</a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Bottom Bar -->
+                    <div class="footer-bottom">
+                        <p class="copyright">© 2025 LUXDRIVE. All rights reserved.</p>
+                        <div class="support-badge">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <span>24/7 Customer Support</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </footer>
+    <?php
+    }
+    function renderHomePage()
+    {
+    ?>
+
         <section class="section hero_section">
             <div class="container flex-center hero_container" style="color: white; flex-direction: column; text-align: center;">
                 <h1>DON'T RENT A CAR.</h1>
@@ -316,7 +527,7 @@ session_start();
                                             <div class="car-price">$250</div>
                                             <div class="price-label">per day</div>
                                         </div>
-                                        <button class="view-more-button">View More</button>
+                                        <a href="index.php?page=car-details&id=1"><button class="view-more-button">View More</button></a>
                                     </div>
                                 </div>
                             </div>
@@ -619,7 +830,7 @@ session_start();
                 </div>
             </div>
         </section>
-        <section class="section contact-section">
+        <section class="section contact-section" id="contactus">
             <div class="container">
                 <!-- Header -->
                 <div class="section-header">
@@ -775,164 +986,341 @@ session_start();
                             Experience the thrill of driving luxury cars from the world's most prestigious brands
                         </p>
                         <div class="cta-buttons">
-                            <button class="cta-button cta-button-primary">
-                                Browse Our Fleet
-                            </button>
-                            <button class="cta-button cta-button-secondary">
-                                Contact Us
-                            </button>
+                            <a href="index.php?page=browse"><button class="cta-button cta-button-primary">Browse Our Fleet</button></a>
+                            <a href="index.php?page=home#contactus"><button class="cta-button cta-button-secondary">Contact Us</button></a>
                         </div>
                     </div>
                 </div>
             </div>
         </section>
-    </main>
 
-    <!-- FOOTER -->
-    <footer class="footer">
-        <!-- Decorative Elements -->
-        <div class="decorative-blur-1"></div>
-        <div class="decorative-blur-2"></div>
-        <div class="footer-content">
+        <!-- car slide script -->
+        <script>
+            // Slider functionality
+            const sliderTrack = document.getElementById('sliderTrack');
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
 
-            <!-- Main Footer Content -->
-            <div class="footer-main">
-                <div class="footer-grid">
-                    <!-- Brand Column -->
-                    <div class="brand-column">
-                        <div class="brand-logo">LUXDRIVE</div>
-                        <p class="brand-description">
-                            Experience the world's finest luxury vehicles. Premium car rental at your fingertips.
-                        </p>
-                        <div class="social-links">
-                            <a href="#" class="social-link" aria-label="Facebook">
-                                <svg fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"></path>
-                                </svg>
-                            </a>
-                            <a href="#" class="social-link" aria-label="Twitter">
-                                <svg fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M23 3a10.9 10.9 0 01-3.14 1.53 4.48 4.48 0 00-7.86 3v1A10.66 10.66 0 013 4s-4 9 5 13a11.64 11.64 0 01-7 2c9 5 20 0 20-11.5a4.5 4.5 0 00-.08-.83A7.72 7.72 0 0023 3z"></path>
-                                </svg>
-                            </a>
-                            <a href="#" class="social-link" aria-label="Instagram">
-                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <rect x="2" y="2" width="20" height="20" rx="5" ry="5" stroke-width="2"></rect>
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37zm1.5-4.87h.01"></path>
-                                </svg>
-                            </a>
-                            <a href="#" class="social-link" aria-label="LinkedIn">
-                                <svg fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6zM2 9h4v12H2z"></path>
-                                    <circle cx="4" cy="4" r="2"></circle>
-                                </svg>
-                            </a>
+            let currentIndex = 0;
+            const itemsPerPage = 2.4;
+            const totalItems = 9; // 8 cars + 1 see more card
+            const maxIndex = Math.max(0, totalItems - itemsPerPage);
+
+            function updateSlider() {
+                const translateX = -(currentIndex * (100 / itemsPerPage));
+                sliderTrack.style.transform = `translateX(${translateX}%)`;
+            }
+
+            prevBtn.addEventListener('click', () => {
+                if (currentIndex > 0) {
+                    currentIndex--;
+                    updateSlider();
+                }
+            });
+
+            nextBtn.addEventListener('click', () => {
+                if (currentIndex < maxIndex) {
+                    currentIndex++;
+                    updateSlider();
+                }
+            });
+
+            // drop down 
+            const toggleBtn = document.querySelector(".dropdown-toggle");
+            const menu = document.querySelector(".dropdown-menu");
+
+            toggleBtn.addEventListener("click", () => {
+                menu.classList.toggle("show");
+            });
+
+            // Close dropdown when clicking outside
+            document.addEventListener("click", (e) => {
+                if (!document.querySelector(".user-dropdown").contains(e.target)) {
+                    menu.classList.remove("show");
+                }
+            });
+        </script>
+
+    <?php
+    }
+    function renderAuth()
+    {
+    ?>
+        <div class="logcontainer">
+            <div class="auth-page">
+                <div class="auth-container container" style="max-width: 1200px;
+	display: flex; align-items: flex-start;">
+                    <!-- Decorative Elements -->
+                    <div class="decorative-glow-1"></div>
+                    <div class="decorative-glow-2"></div>
+
+                    <!-- Left Side - Branding -->
+                    <div class="brand-side">
+                        <div class="logo">LUXDRIVE</div>
+                        <p class="brand-tagline">Your Gateway to Luxury</p>
+                        <p class="brand-description">Experience the finest collection of premium vehicles from world-renowned brands</p>
+
+                        <div class="brand-features">
+                            <div class="feature-item">
+                                <div class="feature-icon">
+                                    <svg class="icon" viewBox="0 0 24 24" style="stroke: white;">
+                                        <path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                                    </svg>
+                                </div>
+                                <div class="feature-text">
+                                    <h4>Premium Fleet</h4>
+                                    <p>350+ luxury vehicles worldwide</p>
+                                </div>
+                            </div>
+
+                            <div class="feature-item">
+                                <div class="feature-icon">
+                                    <svg class="icon" viewBox="0 0 24 24" style="stroke: white;">
+                                        <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                    </svg>
+                                </div>
+                                <div class="feature-text">
+                                    <h4>Secure Booking</h4>
+                                    <p>Safe and encrypted transactions</p>
+                                </div>
+                            </div>
+
+                            <div class="feature-item">
+                                <div class="feature-icon">
+                                    <svg class="icon" viewBox="0 0 24 24" style="stroke: white;">
+                                        <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                </div>
+                                <div class="feature-text">
+                                    <h4>24/7 Support</h4>
+                                    <p>Dedicated concierge service</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Company Column -->
-                    <div class="footer-column">
-                        <h4 class="footer-column-title">Company</h4>
-                        <ul class="footer-links">
-                            <li><a href="#">Features</a></li>
-                            <li><a href="#">Our Fleet</a></li>
-                            <li><a href="#">How It Works</a></li>
-                            <li><a href="#">About Us</a></li>
-                        </ul>
-                    </div>
+                    <!-- Right Side - Auth Forms -->
+                    <div class="form-side" style="
+	flex: 2;">
+                        <div class="auth-containerF" style="width: 100%;">
+                            <!-- Tabs -->
+                            <div class="auth-tabs">
+                                <button class="tab-btn active" onclick="switchTab('login')">Login</button>
+                                <button class="tab-btn" onclick="switchTab('signup')">Sign Up</button>
+                            </div>
 
-                    <!-- Support Column -->
-                    <div class="footer-column">
-                        <h4 class="footer-column-title">Support</h4>
-                        <ul class="footer-links">
-                            <li><a href="#">Help Center</a></li>
-                            <li><a href="#">Contact Us</a></li>
-                            <li><a href="#">FAQ</a></li>
-                            <li><a href="#">Live Chat</a></li>
-                        </ul>
-                    </div>
+                            <!-- Login Form -->
+                            <div id="login-form" class="form-content active">
+                                <div class="form-card">
+                                    <h2>Welcome back</h2>
+                                    <p class="subtitle">Enter your credentials to access your account</p>
 
-                    <!-- Legal Column -->
-                    <div class="footer-column">
-                        <h4 class="footer-column-title">Legal</h4>
-                        <ul class="footer-links">
-                            <li><a href="#">Terms of Service</a></li>
-                            <li><a href="#">Privacy Policy</a></li>
-                            <li><a href="#">Cookie Policy</a></li>
-                            <li><a href="#">Licenses</a></li>
-                        </ul>
-                    </div>
+                                    <form>
+                                        <div class="form-group">
+                                            <label>Email Address</label>
+                                            <input type="email" placeholder="john.doe@example.com">
+                                        </div>
 
-                    <!-- Contact Column -->
-                    <div class="footer-column">
-                        <h4 class="footer-column-title">Contact</h4>
-                        <div class="contact-item">
-                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                            </svg>
-                            <span>123 Luxury Ave, Monaco</span>
+                                        <div class="form-group">
+                                            <label>Password</label>
+                                            <input type="password" placeholder="Enter your password">
+                                        </div>
+
+                                        <div class="forgot-password">
+                                            <a href="#">Forgot password?</a>
+                                        </div>
+
+                                        <div class="checkbox-group">
+                                            <input type="checkbox" id="remember">
+                                            <label for="remember">Remember me for 30 days</label>
+                                        </div>
+
+                                        <button type="submit" class="submit-btn">Login</button>
+
+                                        <div class="divider">
+                                            <span>Or continue with</span>
+                                        </div>
+
+                                        <div class="social-buttons">
+                                            <button type="button" class="social-btn">
+                                                <svg class="icon icon-fill" viewBox="0 0 24 24">
+                                                    <path d="M12.24 10.285V14.4h6.806c-.275 1.765-2.056 5.174-6.806 5.174-4.095 0-7.439-3.389-7.439-7.574s3.345-7.574 7.439-7.574c2.33 0 3.891.989 4.785 1.849l3.254-3.138C18.189 1.186 15.479 0 12.24 0c-6.635 0-12 5.365-12 12s5.365 12 12 12c6.926 0 11.52-4.869 11.52-11.726 0-.788-.085-1.39-.189-1.989H12.24z" />
+                                                </svg>
+                                                Google
+                                            </button>
+                                            <button type="button" class="social-btn">
+                                                <svg class="icon icon-fill" viewBox="0 0 24 24">
+                                                    <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z" />
+                                                </svg>
+                                                Facebook
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+
+                            <!-- Sign Up Form -->
+                            <div id="signup-form" class="form-content">
+                                <div class="form-card">
+                                    <h2>Create account</h2>
+                                    <p class="subtitle">Join LUXDRIVE and start your luxury journey</p>
+
+                                    <form class="signupform">
+                                        <div class="form-row">
+                                            <div class="form-group">
+                                                <label>First Name</label>
+                                                <input type="text" placeholder="John">
+                                            </div>
+                                            <div class="form-group">
+                                                <label>Last Name</label>
+                                                <input type="text" placeholder="Doe">
+                                            </div>
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label>Email Address</label>
+                                            <input type="email" placeholder="john.doe@example.com">
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label>Phone Number</label>
+                                            <input type="tel" placeholder="+1 (555) 000-0000">
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label>Password</label>
+                                            <input type="password" placeholder="Create a strong password">
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label>Confirm Password</label>
+                                            <input type="password" placeholder="Re-enter your password">
+                                        </div>
+
+                                        <div class="checkbox-group">
+                                            <input type="checkbox" id="terms">
+                                            <label for="terms">I agree to the Terms of Service and Privacy Policy</label>
+                                        </div>
+
+                                        <button type="submit" class="submit-btn">Create Account</button>
+
+                                        <div class="divider">
+                                            <span>Or sign up with</span>
+                                        </div>
+
+                                        <div class="social-buttons">
+                                            <button type="button" class="social-btn">
+                                                <svg class="icon icon-fill" viewBox="0 0 24 24">
+                                                    <path d="M12.24 10.285V14.4h6.806c-.275 1.765-2.056 5.174-6.806 5.174-4.095 0-7.439-3.389-7.439-7.574s3.345-7.574 7.439-7.574c2.33 0 3.891.989 4.785 1.849l3.254-3.138C18.189 1.186 15.479 0 12.24 0c-6.635 0-12 5.365-12 12s5.365 12 12 12c6.926 0 11.52-4.869 11.52-11.726 0-.788-.085-1.39-.189-1.989H12.24z" />
+                                                </svg>
+                                                Google
+                                            </button>
+                                            <button type="button" class="social-btn">
+                                                <svg class="icon icon-fill" viewBox="0 0 24 24">
+                                                    <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z" />
+                                                </svg>
+                                                Facebook
+                                            </button>
+                                        </div>
+
+                                        <div class="terms">
+                                            By signing up, you agree to our <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
                         </div>
-                        <div class="contact-item">
-                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path>
-                            </svg>
-                            <span>+1 (555) 123-4567</span>
-                        </div>
-                        <div class="contact-item">
-                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
-                            </svg>
-                            <a href="mailto:info@luxdrive.com">info@luxdrive.com</a>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Bottom Bar -->
-                <div class="footer-bottom">
-                    <p class="copyright">© 2025 LUXDRIVE. All rights reserved.</p>
-                    <div class="support-badge">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
-                        <span>24/7 Customer Support</span>
                     </div>
                 </div>
             </div>
         </div>
-    </footer>
 
-    <!-- car slide script -->
-    <script>
-        // Slider functionality
-        const sliderTrack = document.getElementById('sliderTrack');
-        const prevBtn = document.getElementById('prevBtn');
-        const nextBtn = document.getElementById('nextBtn');
 
-        let currentIndex = 0;
-        const itemsPerPage = 2.4;
-        const totalItems = 9; // 8 cars + 1 see more card
-        const maxIndex = Math.max(0, totalItems - itemsPerPage);
+        <script>
+            function switchTab(tab) {
+                // Update tab buttons
+                const tabBtns = document.querySelectorAll('.tab-btn');
+                tabBtns.forEach(btn => btn.classList.remove('active'));
+                event.target.classList.add('active');
 
-        function updateSlider() {
-            const translateX = -(currentIndex * (100 / itemsPerPage));
-            sliderTrack.style.transform = `translateX(${translateX}%)`;
-        }
+                // Update form visibility
+                const loginForm = document.getElementById('login-form');
+                const signupForm = document.getElementById('signup-form');
 
-        prevBtn.addEventListener('click', () => {
-            if (currentIndex > 0) {
-                currentIndex--;
-                updateSlider();
+                if (tab === 'login') {
+                    loginForm.classList.add('active');
+                    signupForm.classList.remove('active');
+                } else {
+                    loginForm.classList.remove('active');
+                    signupForm.classList.add('active');
+                }
             }
-        });
+        </script>
 
-        nextBtn.addEventListener('click', () => {
-            if (currentIndex < maxIndex) {
-                currentIndex++;
-                updateSlider();
-            }
-        });
-    </script>
-</body>
+    <?php
+    }
 
-</html>
+    // Initialize database
+    // initializeDatabaseEmbedded();
+
+    // Determine which page to render
+    $page = 'home';
+    if (isset($_GET['page'])) {
+        $page = sanitize($_GET['page']);
+    }
+
+    // Render the requested page
+    renderHeader();
+
+    switch ($page) {
+        case 'home':
+            renderHomePage();
+            break;
+        case 'browse':
+            renderBrowseCars();
+            break;
+        case 'about':
+            renderAboutPage();
+            break;
+        case 'auth':
+            renderAuth();
+            break;
+        case 'car-details':
+            render();
+            break;
+        case 'book':
+            renderBookPage();
+            break;
+        case 'dashboard':
+            renderDashboard();
+            break;
+        case 'manage_cars':
+            renderManageCars();
+            break;
+        case 'manage_rentals':
+            renderManageRentals();
+            break;
+        case 'manage_clients':
+            renderManageClients();
+            break;
+        case 'manage_staff':
+            renderManageStaff();
+            break;
+        case 'reports':
+            renderReports();
+            break;
+        case 'maintenance':
+            renderMaintenance();
+            break;
+        case 'logout':
+            renderLogout();
+            break;
+        default:
+            renderHomePage();
+    }
+
+    renderFooter();
+    ?>
+    </body>
+
+    </html>
