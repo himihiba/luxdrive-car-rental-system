@@ -80,7 +80,7 @@ function renderHeader($title = 'LUXDRIVE')
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title><?php echo htmlspecialchars($title); ?></title>
-        <link rel="stylesheet" href="styleV03.css">
+        <link rel="stylesheet" href="styleV04.css">
     </head>
 
     <body>
@@ -838,7 +838,6 @@ function renderHeader($title = 'LUXDRIVE')
                         </div>
                     </div>
                 </div>
-            </div>
         </section>
         <section class="section contact-section" id="contactus">
             <div class="container">
@@ -1134,7 +1133,11 @@ function renderHeader($title = 'LUXDRIVE')
                                             <div class="car-price">$<?php echo $car['price']; ?></div>
                                             <div class="price-label">per day</div>
                                         </div>
-                                        <a href="index.php?page=car-details&id=1"><button class="view-more-button">View More</button></a>
+                                        <a href="index.php?page=car-details&id=1" style="text-decoration: none;">
+                                            <button class="view-more-button">
+                                                View More
+                                            </button>
+                                        </a>
                                     </div>
                                 </div>
                             </div>
@@ -1222,10 +1225,8 @@ function renderHeader($title = 'LUXDRIVE')
                                 <?php foreach ($car['specs'] as $label => $value): ?>
                                     <div class="spec-detail-item">
                                         <div class="spec-icon">
-                                            <!-- Simple icons based on label -->
                                             <?php if ($label == 'Seats') {
-                                                echo '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17l-5-5 5-5M17 7l5 5-5 5"/></svg>'; // Placeholder icon 
-                                            ?>
+                                                echo '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17l-5-5 5-5M17 7l5 5-5 5"/></svg>'; ?>
                                             <?php } else { ?>
                                                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                                     <circle cx="12" cy="12" r="10"></circle>
@@ -1266,10 +1267,17 @@ function renderHeader($title = 'LUXDRIVE')
                             <?php endforeach; ?>
                         </div>
 
-                        <a href="index.php?page=book"><button class="book-now-btn">Book This Car</button></a>
+                        <!-- Changed: Book Now button opens modal -->
+                        <button class="book-now-btn" onclick="openBookingModal(<?php echo $car['price']; ?>, '<?php echo htmlspecialchars($car['name'] . ' ' . $car['model'], ENT_QUOTES); ?>')">
+                            Book This Car
+                        </button>
                     </div>
                 </div>
             </div>
+
+            <!-- ===== BOOKING MODALS ===== -->
+            <?php includeBookingModals(); ?>
+
             <script>
                 function changeImage(src) {
                     document.getElementById('mainImage').src = src;
@@ -1278,13 +1286,507 @@ function renderHeader($title = 'LUXDRIVE')
         </main>
     <?php
     }
+    function includeBookingModals()
+    {
+    ?>
+        <!-- Step 1: Select Dates Modal -->
+        <div id="booking-modal-step1" class="booking-modal">
+            <div class="booking-modal-content">
+                <div class="booking-modal-header">
+                    <h2 id="modal-car-title">Book Car</h2>
+                    <button class="booking-modal-close" onclick="closeBookingModal('step1')">&times;</button>
+                </div>
+                <div class="booking-modal-body">
+                    <h3>Select Rental Dates</h3>
+
+                    <div class="booking-form-group">
+                        <label>Pickup Date</label>
+                        <input type="date" id="booking-pickup-date" class="booking-date-input">
+                    </div>
+
+                    <div class="booking-form-group">
+                        <label>Return Date</label>
+                        <input type="date" id="booking-return-date" class="booking-date-input">
+                    </div>
+
+                    <div class="booking-summary-box">
+                        <div class="booking-summary-item">
+                            <span>Rental Duration:</span>
+                            <span id="booking-duration-display">0 days</span>
+                        </div>
+                        <div class="booking-summary-item">
+                            <span>Base Price:</span>
+                            <span id="booking-base-price">$0.00</span>
+                        </div>
+                    </div>
+
+                    <button class="booking-btn-primary" onclick="proceedToExtras()">
+                        Continue to Extras
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 2: Extras Modal -->
+        <div id="booking-modal-step2" class="booking-modal">
+            <div class="booking-modal-content">
+                <div class="booking-modal-header">
+                    <h2 id="modal-car-title-step2">Book Car</h2>
+                    <button class="booking-modal-close" onclick="closeBookingModal('step2')">&times;</button>
+                </div>
+                <div class="booking-modal-body">
+                    <h3>Add Extras (Optional)</h3>
+
+                    <div class="booking-extras-list">
+                        <div class="booking-extra-item" onclick="toggleExtra('gps')">
+                            <div class="booking-extra-info">
+                                <input type="checkbox" id="booking-gps" class="booking-extra-checkbox" data-price="10">
+                                <label for="booking-gps">GPS Navigation</label>
+                                <span class="booking-extra-price">$10 per day</span>
+                            </div>
+                            <div class="booking-extra-total" id="booking-gps-total">$0.00</div>
+                        </div>
+
+                        <div class="booking-extra-item" onclick="toggleExtra('insurance')">
+                            <div class="booking-extra-info">
+                                <input type="checkbox" id="booking-insurance" class="booking-extra-checkbox" data-price="15">
+                                <label for="booking-insurance">Full Insurance</label>
+                                <span class="booking-extra-price">$15 per day</span>
+                            </div>
+                            <div class="booking-extra-total" id="booking-insurance-total">$0.00</div>
+                        </div>
+
+                        <div class="booking-extra-item" onclick="toggleExtra('child-seat')">
+                            <div class="booking-extra-info">
+                                <input type="checkbox" id="booking-child-seat" class="booking-extra-checkbox" data-price="7">
+                                <label for="booking-child-seat">Child Seat</label>
+                                <span class="booking-extra-price">$7 per day</span>
+                            </div>
+                            <div class="booking-extra-total" id="booking-child-seat-total">$0.00</div>
+                        </div>
+                    </div>
+
+                    <div class="booking-price-summary">
+                        <div class="booking-summary-item">
+                            <span>Base Price (<span id="booking-days-count">0</span> days):</span>
+                            <span id="booking-base-price-step2">$0.00</span>
+                        </div>
+                        <div class="booking-summary-item">
+                            <span>Extras Total:</span>
+                            <span id="booking-extras-total">$0.00</span>
+                        </div>
+                        <div class="booking-summary-item total">
+                            <span>Subtotal:</span>
+                            <span id="booking-subtotal">$0.00</span>
+                        </div>
+                    </div>
+
+                    <div class="booking-modal-actions">
+                        <button class="booking-btn-secondary" onclick="backToDates()">
+                            Back
+                        </button>
+                        <button class="booking-btn-primary" onclick="proceedToPayment()">
+                            Continue to Payment
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 3: Payment Modal -->
+        <div id="booking-modal-step3" class="booking-modal">
+            <div class="booking-modal-content">
+                <div class="booking-modal-header">
+                    <h2 id="modal-car-title-step3">Book Car</h2>
+                    <button class="booking-modal-close" onclick="closeBookingModal('step3')">&times;</button>
+                </div>
+                <div class="booking-modal-body">
+                    <h3>Payment Details</h3>
+
+                    <div class="booking-payment-section">
+                        <h4>Payment Method</h4>
+                        <div class="booking-payment-methods">
+                            <label class="booking-payment-option" onclick="selectPayment('credit')">
+                                <input type="radio" name="booking-payment" value="credit" checked>
+                                <span>Credit Card</span>
+                            </label>
+                            <label class="booking-payment-option" onclick="selectPayment('debit')">
+                                <input type="radio" name="booking-payment" value="debit">
+                                <span>Debit Card</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="booking-booking-summary">
+                        <h4>Booking Summary</h4>
+                        <div class="booking-summary-item">
+                            <span>Vehicle:</span>
+                            <span id="booking-vehicle-summary">Toyota Corolla</span>
+                        </div>
+                        <div class="booking-summary-item">
+                            <span>Rental Period:</span>
+                            <span id="booking-rental-period-summary">-</span>
+                        </div>
+                        <div class="booking-summary-item">
+                            <span>Duration:</span>
+                            <span id="booking-duration-summary">0 days</span>
+                        </div>
+                        <div class="booking-summary-item">
+                            <span>Base Price:</span>
+                            <span id="booking-base-price-summary">$0.00</span>
+                        </div>
+                        <div class="booking-summary-item">
+                            <span>Extras:</span>
+                            <span id="booking-extras-summary">$0.00</span>
+                        </div>
+                        <div class="booking-summary-item total">
+                            <span>Total Amount:</span>
+                            <span id="booking-total-amount">$0.00</span>
+                        </div>
+                    </div>
+
+                    <div class="booking-modal-actions">
+                        <button class="booking-btn-secondary" onclick="backToExtras()">
+                            Back
+                        </button>
+                        <button class="booking-btn-primary" onclick="confirmBooking()">
+                            Confirm Booking
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 4: Confirmation Modal -->
+        <div id="booking-modal-step4" class="booking-modal">
+            <div class="booking-modal-content booking-confirmation">
+                <div class="booking-modal-body">
+                    <div class="booking-confirmation-icon">
+                        ✓
+                    </div>
+                    <h2>Booking Confirmed!</h2>
+                    <p>Your car has been successfully booked.</p>
+                    <p>Your booking confirmation email has been sent.</p>
+
+                    <div class="booking-confirmation-details">
+                        <div class="booking-detail-item">
+                            <span>Vehicle:</span>
+                            <span id="confirmed-vehicle">Toyota Corolla 1.8</span>
+                        </div>
+                        <div class="booking-detail-item">
+                            <span>Duration:</span>
+                            <span id="confirmed-duration">1 day</span>
+                        </div>
+                        <div class="booking-detail-item">
+                            <span>Total:</span>
+                            <span id="confirmed-total">$0.00</span>
+                        </div>
+                    </div>
+
+                    <button class="booking-btn-primary" onclick="closeAllBookingModals()">
+                        Done
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- JavaScript for Booking Modal -->
+        <script>
+            // Booking Data Object
+            const bookingData = {
+                vehicle: "",
+                basePricePerDay: 0,
+                pickupDate: null,
+                returnDate: null,
+                duration: 0,
+                extras: {
+                    gps: false,
+                    insurance: false,
+                    childSeat: false
+                },
+                paymentMethod: 'credit',
+                total: 0
+            };
+
+            function openBookingModal(pricePerDay, vehicleName) {
+                // Set booking data from car details
+                bookingData.basePricePerDay = pricePerDay;
+                bookingData.vehicle = vehicleName;
+
+                // Update modal titles
+                document.getElementById('modal-car-title').textContent = 'Book ' + vehicleName;
+                document.getElementById('modal-car-title-step2').textContent = 'Book ' + vehicleName;
+                document.getElementById('modal-car-title-step3').textContent = 'Book ' + vehicleName;
+                document.getElementById('booking-vehicle-summary').textContent = vehicleName;
+                document.getElementById('confirmed-vehicle').textContent = vehicleName;
+
+                // Initialize dates
+                initializeBookingDates();
+                closeAllBookingModals();
+                document.getElementById('booking-modal-step1').style.display = 'block';
+            }
+
+            function closeBookingModal(step) {
+                // Accept either numeric step (1,2,3,4) or strings like "step1" or full id
+                if (typeof step === 'number') {
+                    step = String(step);
+                }
+                let id = '';
+                if (typeof step === 'string') {
+                    if (step.startsWith('booking-modal-')) {
+                        id = step;
+                    } else if (step.startsWith('step')) {
+                        id = 'booking-modal-' + step; // e.g. 'step1' -> 'booking-modal-step1'
+                    } else if (/^\d+$/.test(step)) {
+                        id = 'booking-modal-step' + step; // e.g. '1' -> 'booking-modal-step1'
+                    } else {
+                        // fallback: try common forms
+                        id = 'booking-modal-step' + step;
+                    }
+                } else {
+                    id = 'booking-modal-step' + step;
+                }
+                const el = document.getElementById(id);
+                if (el) {
+                    el.style.display = 'none';
+                }
+            }
+
+            function closeAllBookingModals() {
+                const modals = document.querySelectorAll('.booking-modal');
+                modals.forEach(modal => {
+                    modal.style.display = 'none';
+                });
+            }
+
+            function initializeBookingDates() {
+                const today = new Date();
+                const tomorrow = new Date(today);
+                tomorrow.setDate(tomorrow.getDate() + 1);
+
+                // Format dates for input fields (YYYY-MM-DD)
+                const todayStr = today.toISOString().split('T')[0];
+                const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+                document.getElementById('booking-pickup-date').value = todayStr;
+                document.getElementById('booking-return-date').value = tomorrowStr;
+
+                calculateBookingDuration();
+            }
+
+            function calculateBookingDuration() {
+                const pickupInput = document.getElementById('booking-pickup-date');
+                const returnInput = document.getElementById('booking-return-date');
+
+                if (!pickupInput || !returnInput) return;
+
+                const pickup = new Date(pickupInput.value);
+                const returnDate = new Date(returnInput.value);
+
+                const diffTime = Math.abs(returnDate - pickup);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+
+                bookingData.duration = diffDays;
+                bookingData.pickupDate = pickupInput.value;
+                bookingData.returnDate = returnInput.value;
+
+                updateStep1Display();
+            }
+
+            function updateStep1Display() {
+                const basePrice = bookingData.duration * bookingData.basePricePerDay;
+
+                document.getElementById('booking-duration-display').textContent =
+                    `${bookingData.duration} day${bookingData.duration !== 1 ? 's' : ''}`;
+                document.getElementById('booking-base-price').textContent =
+                    `$${basePrice.toFixed(2)}`;
+            }
+
+            function proceedToExtras() {
+                if (bookingData.duration < 1) {
+                    alert('Please select valid rental dates');
+                    return;
+                }
+
+                closeBookingModal('step1');
+                document.getElementById('booking-modal-step2').style.display = 'block';
+                updateExtrasDisplay();
+            }
+
+            function backToDates() {
+                closeBookingModal('step2');
+                document.getElementById('booking-modal-step1').style.display = 'block';
+            }
+
+            function toggleExtra(extraId) {
+                const checkbox = document.getElementById('booking-' + extraId);
+                if (checkbox) {
+                    checkbox.checked = !checkbox.checked;
+                    updateExtraTotal(extraId);
+                    calculateExtrasTotal();
+                }
+            }
+
+            function updateExtraTotal(extraId) {
+                const checkbox = document.getElementById('booking-' + extraId);
+                const price = parseFloat(checkbox.dataset.price);
+                const total = checkbox.checked ? price * bookingData.duration : 0;
+                const elementId = 'booking-' + extraId + '-total';
+
+                const element = document.getElementById(elementId);
+                if (element) {
+                    element.textContent = `$${total.toFixed(2)}`;
+                }
+            }
+
+            function updateExtrasDisplay() {
+                const daysCount = bookingData.duration;
+
+                document.getElementById('booking-days-count').textContent = daysCount;
+                document.getElementById('booking-base-price-step2').textContent =
+                    `$${(daysCount * bookingData.basePricePerDay).toFixed(2)}`;
+
+                // Update all extras
+                ['gps', 'insurance', 'child-seat'].forEach(extra => {
+                    updateExtraTotal(extra);
+                });
+
+                calculateExtrasTotal();
+            }
+
+            function calculateExtrasTotal() {
+                let extrasTotal = 0;
+                const checkboxes = document.querySelectorAll('.booking-extra-checkbox:checked');
+
+                checkboxes.forEach(checkbox => {
+                    const price = parseFloat(checkbox.dataset.price);
+                    extrasTotal += price * bookingData.duration;
+                });
+
+                document.getElementById('booking-extras-total').textContent =
+                    `$${extrasTotal.toFixed(2)}`;
+
+                const basePrice = bookingData.duration * bookingData.basePricePerDay;
+                const subtotal = basePrice + extrasTotal;
+
+                document.getElementById('booking-subtotal').textContent = `$${subtotal.toFixed(2)}`;
+            }
+
+            function proceedToPayment() {
+                calculateBookingTotal();
+                closeBookingModal('step2');
+                document.getElementById('booking-modal-step3').style.display = 'block';
+                updatePaymentSummary();
+            }
+
+            function backToExtras() {
+                closeBookingModal('step3');
+                document.getElementById('booking-modal-step2').style.display = 'block';
+            }
+
+            function selectPayment(method) {
+                bookingData.paymentMethod = method;
+            }
+
+            function calculateBookingTotal() {
+                let extrasTotal = 0;
+                const checkboxes = document.querySelectorAll('.booking-extra-checkbox:checked');
+
+                checkboxes.forEach(checkbox => {
+                    const price = parseFloat(checkbox.dataset.price);
+                    extrasTotal += price * bookingData.duration;
+
+                    // Update booking data
+                    const extraId = checkbox.id.replace('booking-', '');
+                    bookingData.extras[extraId] = true;
+                });
+
+                const basePrice = bookingData.duration * bookingData.basePricePerDay;
+                bookingData.total = basePrice + extrasTotal;
+            }
+
+            function updatePaymentSummary() {
+                document.getElementById('booking-rental-period-summary').textContent =
+                    `${bookingData.pickupDate} to ${bookingData.returnDate}`;
+                document.getElementById('booking-duration-summary').textContent =
+                    `${bookingData.duration} day${bookingData.duration !== 1 ? 's' : ''}`;
+
+                const basePrice = bookingData.duration * bookingData.basePricePerDay;
+                document.getElementById('booking-base-price-summary').textContent =
+                    `$${basePrice.toFixed(2)}`;
+
+                // Calculate extras for summary
+                let extrasTotal = 0;
+                const checkboxes = document.querySelectorAll('.booking-extra-checkbox:checked');
+
+                checkboxes.forEach(checkbox => {
+                    const price = parseFloat(checkbox.dataset.price);
+                    extrasTotal += price * bookingData.duration;
+                });
+
+                document.getElementById('booking-extras-summary').textContent =
+                    extrasTotal > 0 ? `$${extrasTotal.toFixed(2)}` : 'None';
+
+                document.getElementById('booking-total-amount').textContent =
+                    `$${bookingData.total.toFixed(2)}`;
+            }
+
+            function confirmBooking() {
+                // Here you would normally send data to server
+                // For now, just show confirmation
+                closeBookingModal('step3');
+                document.getElementById('booking-modal-step4').style.display = 'block';
+
+                // Update confirmation details
+                document.getElementById('confirmed-duration').textContent =
+                    `${bookingData.duration} day${bookingData.duration !== 1 ? 's' : ''}`;
+                document.getElementById('confirmed-total').textContent =
+                    `$${bookingData.total.toFixed(2)}`;
+            }
+
+            // Event Listeners when DOM is loaded
+            document.addEventListener('DOMContentLoaded', function() {
+                // Date change listeners
+                const pickupDateInput = document.getElementById('booking-pickup-date');
+                const returnDateInput = document.getElementById('booking-return-date');
+
+                if (pickupDateInput && returnDateInput) {
+                    pickupDateInput.addEventListener('change', calculateBookingDuration);
+                    returnDateInput.addEventListener('change', calculateBookingDuration);
+                }
+
+                // Extras checkbox listeners
+                const extraCheckboxes = document.querySelectorAll('.booking-extra-checkbox');
+                extraCheckboxes.forEach(checkbox => {
+                    checkbox.addEventListener('change', function() {
+                        const extraId = this.id.replace('booking-', '');
+                        updateExtraTotal(extraId);
+                        calculateExtrasTotal();
+                    });
+                });
+
+                // Close modal when clicking outside
+                window.addEventListener('click', function(event) {
+                    if (event.target.classList.contains('booking-modal')) {
+                        event.target.style.display = 'none';
+                    }
+                });
+
+                // Initialize dates if modal exists
+                if (pickupDateInput) {
+                    initializeBookingDates();
+                }
+            });
+        </script>
+    <?php
+    }
     function renderAuth()
     {
     ?>
         <div class="logcontainer">
             <div class="auth-page">
                 <div class="auth-container container" style="max-width: 1200px;
-	display: flex; align-items: flex-start;">
+	     display: flex; align-items: flex-start;">
                     <!-- Decorative Elements -->
                     <div class="decorative-glow-1"></div>
                     <div class="decorative-glow-2"></div>
@@ -1336,7 +1838,7 @@ function renderHeader($title = 'LUXDRIVE')
 
                     <!-- Right Side - Auth Forms -->
                     <div class="form-side" style="
-	flex: 2;">
+	  flex: 2;">
                         <div class="auth-containerF" style="width: 100%;">
                             <!-- Tabs -->
                             <div class="auth-tabs">
