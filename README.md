@@ -1,18 +1,16 @@
-# 🚗 LUXDRIVE - Luxury Car Rental Management System
+# LUXDRIVE - Luxury Car Rental Management System
 
 A comprehensive web-based car rental management system built with PHP and MySQL, designed for luxury car rental agencies to manage their fleet, clients, staff, and rental operations.
 
-## 📋 Table of Contents
+## Table of Contents
 
 - [Features](#features)
 - [Technologies Used](#technologies-used)
-- [Database Schema](#database-schema)
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [User Roles & Default Credentials](#user-roles--default-credentials)
 - [Project Structure](#project-structure)
 - [Key Functionalities](#key-functionalities)
-- [Database Features](#database-features)
 - [Security](#security)
 - [Usage Guide](#usage-guide)
 
@@ -56,103 +54,12 @@ A comprehensive web-based car rental management system built with PHP and MySQL,
 - **Frontend:** HTML5, CSS3 (embedded in PHP)
 - **Hosting:** Compatible with XAMPP, InfinityFree, and other PHP hosting platforms
 
-## 🗄 Database Schema
-
-### Tables Structure
-
-#### 1. **agencies**
-Stores information about different rental agency branches.
-```sql
-- agency_id (PK)
-- name
-- city
-- address
-- contact_email
-- created_at
-```
-
-#### 2. **clients**
-Manages customer information and authentication.
-```sql
-- client_id (PK)
-- first_name, last_name
-- email (UNIQUE)
-- phone
-- driver_license (UNIQUE)
-- password_hash
-- address
-- registration_date
-```
-
-#### 3. **staff**
-Stores employee information with role-based access.
-```sql
-- staff_id (PK)
-- agency_id (FK)
-- first_name, last_name
-- email (UNIQUE)
-- phone
-- role (super_admin, admin, agent, mechanic)
-- password_hash
-- hire_date
-```
-
-#### 4. **cars**
-Contains vehicle inventory with detailed specifications.
-```sql
-- car_id (PK)
-- agency_id (FK)
-- brand, model, year
-- license_plate (UNIQUE)
-- color, mileage
-- status (available, rented, maintenance)
-- daily_price
-- image_url
-- car_type, seats, transmission, fuel_type
-```
-
-#### 5. **rentals**
-Tracks all rental transactions.
-```sql
-- rental_id (PK)
-- agency_id, client_id, car_id, staff_id (FKs)
-- start_date, end_date
-- total_price
-- status (ongoing, completed, cancelled)
-- extras
-- created_at
-```
-
-#### 6. **payments**
-Records all payment transactions.
-```sql
-- payment_id (PK)
-- rental_id (FK)
-- amount
-- method (cash, credit_card, debit_card, bank_transfer)
-- payment_date
-- status (paid, pending, refunded)
-```
-
-#### 7. **maintenance**
-Tracks vehicle maintenance records.
-```sql
-- maintenance_id (PK)
-- car_id, staff_id (FKs)
-- description
-- cost
-- maintenance_date
-- status (pending, in_progress, completed)
-- performed_by
-```
-
 ## 📦 Installation
 
 ### Prerequisites
 - PHP 7.4 or higher
 - MySQL 5.7 or higher
 - Web server (Apache/Nginx) or XAMPP
-- PDO PHP extension
 
 ### Steps
 
@@ -169,7 +76,7 @@ Tracks vehicle maintenance records.
 3. **Configure Database Connection**
    - Edit the database configuration in `himihiba.php` (lines 5-8):
    ```php
-   $host = "your_database_host";      // e.g., "localhost" or "sql300.infinityfree.com"
+   $host = "your_database_host";     
    $user = "your_database_username";
    $pass = "your_database_password";
    $dbname = "your_database_name";
@@ -180,26 +87,10 @@ Tracks vehicle maintenance records.
    - Sample data is populated automatically
    - No manual SQL import required!
 
-5. **Set Permissions**
-   - Ensure the `uploads/cars/` directory is writable
-   ```bash
-   chmod -R 755 uploads/
-   ```
 
 6. **Access the Application**
    - Navigate to: `http://localhost/Car_rental_project/himihiba.php`
    - The database will initialize automatically on first load
-
-## ⚙️ Configuration
-
-### Database Configuration
-Edit in `himihiba.php`:
-```php
-$host = "sql300.infinityfree.com";        // Database host
-$user = "if0_40660033";                    // Database username
-$pass = "garassa08";                       // Database password
-$dbname = "if0_40660033_luxdriveDB";      // Database name
-```
 
 ### Session Configuration
 The system uses a custom session name for security:
@@ -246,42 +137,11 @@ The system comes with pre-configured demo accounts:
 ```
 Car_rental_project/
 ├── himihiba.php              # Main application file (all-in-one)
-├── todolist.todo             # Project task list
 ├── uploads/                  # File upload directory
 │   └── cars/                 # Car image storage
 └── README.md                 # Project documentation
 ```
 
-### Code Organization in himihiba.php
-
-The main file is structured into sections:
-
-1. **Configuration** (Lines 1-10)
-   - Database credentials
-   - Session initialization
-
-2. **Database Functions** (Lines 12-300)
-   - `initializeDatabase()` - Database setup
-   - `createTables()` - Schema creation
-   - `insertSampleData()` - Demo data
-   - `createTriggersAndViews()` - Advanced SQL features
-
-3. **Authentication Functions** (Lines 341-474)
-   - `handleLogin()` - User login
-   - `handleRegister()` - Client registration
-   - `handleLogout()` - Session termination
-   - Authorization helpers
-
-4. **Business Logic Functions** (Lines 479-694)
-   - Car management
-   - Rental operations
-   - Payment processing
-   - Profile management
-
-5. **Frontend/UI** (Lines 714+)
-   - HTML/CSS embedded in PHP
-   - Responsive design
-   - User interface components
 
 ## 🔑 Key Functionalities
 
@@ -313,30 +173,6 @@ The main file is structured into sections:
 - Three states: available, rented, maintenance
 - Real-time availability tracking
 
-## 🔧 Database Features
-
-### Triggers
-1. **after_rental_insert**
-   - Automatically sets car status to 'rented' when a new rental is created
-
-2. **after_rental_complete**
-   - Sets car status back to 'available' when rental is completed
-
-### Stored Procedures
-- **complete_rental(rental_id)** - Efficiently complete rental transactions
-
-### Views
-1. **currently_rented_cars**
-   - Shows all active rentals with car and client details
-
-2. **revenue_by_month**
-   - Aggregates monthly revenue from paid payments
-
-### Foreign Keys
-- Full referential integrity
-- CASCADE deletes for dependent records
-- SET NULL for optional relationships
-
 ## 🔒 Security
 
 ### Implemented Security Measures
@@ -362,106 +198,7 @@ The main file is structured into sections:
    - Driver license validation
    - Password strength requirements (6+ characters)
 
-### Security Recommendations
-⚠️ **Before deploying to production:**
-
-1. **Remove or Secure Demo Credentials**
-   - Change all default passwords
-   - Remove sample data in production
-
-2. **Environment Variables**
-   - Move database credentials to environment variables
-   - Never commit credentials to version control
-
-3. **HTTPS**
-   - Use SSL/TLS certificates
-   - Force HTTPS connections
-
-4. **Additional Security Headers**
-   - Implement CSRF tokens
-   - Add security headers (CSP, X-Frame-Options)
-
-5. **Password Policy**
-   - Increase minimum password length
-   - Require password complexity
-
-## 📖 Usage Guide
-
-### For Clients
-
-1. **Registration**
-   - Navigate to registration page
-   - Fill in personal details and driver license
-   - Create secure password
-   - Verify email uniqueness
-
-2. **Browsing Cars**
-   - View available luxury cars
-   - Filter by type, brand, price
-   - Check car specifications
-
-3. **Making a Reservation**
-   - Select desired car
-   - Choose rental dates
-   - Review total price
-   - Select payment method
-   - Confirm booking
-
-4. **Managing Rentals**
-   - View active rentals
-   - Check rental history
-   - Cancel ongoing rentals (if needed)
-
-### For Staff
-
-1. **Admin Functions**
-   - Manage agency operations
-   - Oversee rentals and payments
-   - Staff management
-   - Revenue reporting
-
-2. **Agent Functions**
-   - Process rental bookings
-   - Handle customer inquiries
-   - Manage car availability
-
-3. **Mechanic Functions**
-   - Update maintenance records
-   - Track vehicle service history
-   - Manage car repair status
-
-### For Super Admin
-
-1. **System-Wide Management**
-   - Access all agencies
-   - Manage all staff members
-   - View global statistics
-   - Configure system settings
-
-## 🚀 Sample Data Included
-
-The system includes pre-loaded data for testing:
-
-- **2 Agencies:** Paris HQ and Lyon Branch
-- **7 Staff Members:** 1 Super Admin, 2 Admins, 2 Agents, 2 Mechanics
-- **2 Clients:** Test accounts with complete profiles
-- **8 Luxury Cars:** Mercedes, Porsche, Ferrari, Range Rover, BMW, Audi, Lamborghini, Bentley
-- **3 Sample Rentals:** Ongoing and completed rentals
-- **3 Payment Records:** Various payment statuses
-- **1 Maintenance Record:** In-progress maintenance
-
-## 🔄 Database Reset
-
-To reset the database to initial state:
-
-1. Delete the `agencies` table from your database
-2. Reload the application
-3. The system will automatically:
-   - Drop all existing tables
-   - Recreate schema
-   - Insert fresh sample data
-
-## 📝 Notes
+## Notes
 
 - The system uses a single-file architecture (`himihiba.php`) containing all backend and frontend code
 - All CSS is embedded within the PHP file
@@ -469,36 +206,20 @@ To reset the database to initial state:
 - No separate SQL dump file is needed
 - Images are loaded from Unsplash URLs (external links)
 
-## 🐛 Troubleshooting
+## License
 
-### Database Connection Issues
-- Verify MySQL service is running
-- Check database credentials
-- Ensure PDO extension is enabled
+This project is developed for educational and commercial purposes.
 
-### Permission Errors
-- Check file permissions on uploads directory
-- Ensure web server has write access
-
-### Session Issues
-- Clear browser cookies
-- Check PHP session configuration
-- Verify session directory is writable
-
-## 📄 License
-
-This project is developed for educational and commercial purposes. Please ensure compliance with local regulations regarding car rental operations.
-
-## 👨‍💻 Developer
+## Developer
 
 - **Owner:** himihiba
 - **Repository:** Car_rental_project
 - **Platform:** GitHub
 
-## 🤝 Contributing
+##  Contributing
 
 Contributions are welcome! Feel free to submit issues or pull requests to improve the system.
 
 ---
 
-**LuxDrive** - Elevating Luxury Car Rental Management 🚗✨
+**LuxDrive** - Elevating Luxury Car Rental Management 
