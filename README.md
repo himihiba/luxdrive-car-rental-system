@@ -2,7 +2,6 @@
 
 A comprehensive web-based car rental management system built with PHP and MySQL, designed for luxury car rental agencies to manage their fleet, clients, staff, and rental operations.
 
-<<<<<<< HEAD
 ## Live Demo
 
 **[View Live Demo →](https://luxdrive.infinityfreeapp.com/himihiba.php)**
@@ -12,7 +11,6 @@ Try out the system with the demo accounts listed under the login form
 ## 📋 Table of Contents
 =======
 ## Table of Contents
->>>>>>> 5d1f309466481beaf5b1472c7f00578cb93c2cea
 
 - [Features](#features)
 - [Technologies Used](#technologies-used)
