@@ -13,12 +13,10 @@ Try out the system with the demo accounts listed under the login form
 - [Features](#features)
 - [Technologies Used](#technologies-used)
 - [Installation](#installation)
-- [Configuration](#configuration)
 - [User Roles & Default Credentials](#user-roles--default-credentials)
 - [Project Structure](#project-structure)
 - [Key Functionalities](#key-functionalities)
 - [Security](#security)
-- [Usage Guide](#usage-guide)
 
 ## Features
 
