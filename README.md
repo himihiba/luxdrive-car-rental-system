@@ -20,7 +20,7 @@ Try out the system with the demo accounts listed under the login form
 - [Security](#security)
 - [Usage Guide](#usage-guide)
 
-##Features
+## Features
 
 ### For Clients
 - **User Registration & Authentication** - Secure account creation and login
