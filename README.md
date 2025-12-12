@@ -8,7 +8,6 @@ A comprehensive web-based car rental management system built with PHP and MySQL,
 
 Try out the system with the demo accounts listed under the login form
 
-
 ## Table of Contents
 
 - [Features](#features)
@@ -150,7 +149,8 @@ Car_rental_project/
 ```
 
 
-## Key Functionalities
+
+##  Key Functionalities
 
 ### 1. Authentication System
 - Secure password hashing using PHP's `password_hash()`
