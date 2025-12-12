@@ -21,7 +21,7 @@ Try out the system with the demo accounts listed under the login form
 - [Security](#security)
 - [Usage Guide](#usage-guide)
 
-## ✨ Features
+## Features
 
 ### For Clients
 - **User Registration & Authentication** - Secure account creation and login
@@ -61,7 +61,7 @@ Try out the system with the demo accounts listed under the login form
 - **Frontend:** HTML5, CSS3 (embedded in PHP)
 - **Hosting:** Compatible with XAMPP, InfinityFree, and other PHP hosting platforms
 
-## 📦 Installation
+## Installation
 
 ### Prerequisites
 - PHP 7.4 or higher
@@ -108,7 +108,7 @@ session_name("himihiba_carRental");
 ### File Upload Directory
 Car images are stored in: `uploads/cars/`
 
-## 👥 User Roles & Default Credentials
+## User Roles & Default Credentials
 
 The system comes with pre-configured demo accounts:
 
@@ -139,7 +139,7 @@ The system comes with pre-configured demo accounts:
 | Agent | Sophie Martin | agent2@luxdrive.com | agent123 |
 | Mechanic | Hugo Laurent | mech2@luxdrive.com | mech123 |
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 Car_rental_project/
@@ -150,7 +150,7 @@ Car_rental_project/
 ```
 
 
-## 🔑 Key Functionalities
+## Key Functionalities
 
 ### 1. Authentication System
 - Secure password hashing using PHP's `password_hash()`
@@ -180,7 +180,7 @@ Car_rental_project/
 - Three states: available, rented, maintenance
 - Real-time availability tracking
 
-## 🔒 Security
+## Security
 
 ### Implemented Security Measures
 1. **Password Security**
